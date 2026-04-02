@@ -21,7 +21,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 // ============================================
 // KONFIGURACJA — zmień na swój URL backendu
 // ============================================
-export const API_URL = 'https://your-backend-url.com';
+export const API_URL = 'https://tipme-backend.onrender.com';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
