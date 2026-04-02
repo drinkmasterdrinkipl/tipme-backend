@@ -1,0 +1,2 @@
+Object.defineProperty(exports,"__esModule",{value:true});exports.default=void 0;var _reactNative=require("react-native");var StripeTerminalReactNative=_reactNative.NativeModules.StripeTerminalReactNative;var _default=exports.default=StripeTerminalReactNative;
+//# sourceMappingURL=StripeTerminalSdk.js.map

@@ -1,0 +1,2 @@
+Object.defineProperty(exports,"__esModule",{value:true});exports.StripeTerminalContext=void 0;var _react=require("react");var StripeTerminalContext=exports.StripeTerminalContext=(0,_react.createContext)({emitter:undefined,discoveredReaders:[],loading:false,isInitialized:false,getIsInitialized:function getIsInitialized(){return false;},log:function log(){},setLoading:function setLoading(){},setConnectedReader:function setConnectedReader(){},initialize:undefined,setDiscoveredReaders:function setDiscoveredReaders(){}});
+//# sourceMappingURL=StripeTerminalContext.js.map

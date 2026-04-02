@@ -1,0 +1,2 @@
+Object.defineProperty(exports,"__esModule",{value:true});exports.useListener=useListener;var _react=require("react");var _reactNative=require("react-native");var eventEmitter=new _reactNative.NativeEventEmitter(_reactNative.NativeModules.StripeTerminalReactNative);function useListener(name,callback){(0,_react.useEffect)(function(){var listener=eventEmitter.addListener(name,callback);return function(){listener.remove();};},[name,callback]);}
+//# sourceMappingURL=useListener.js.map
