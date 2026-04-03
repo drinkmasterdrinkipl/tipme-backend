@@ -167,22 +167,57 @@ app.get('/api/transactions/:accountId', async (req, res) => {
 });
 
 // ============================================
-// 6. STATYSTYKI
-// Podsumowanie dzisiejsze dla użytkownika
+// Pomocnicza — przedział czasowy dnia w strefie PL (Europe/Warsaw)
+// ============================================
+function getPolandDayBounds(dateStr) {
+  // dateStr: 'YYYY-MM-DD' lub null (= dziś)
+  const now = new Date();
+  const polandOffset = getPLOffset(now);
+
+  let year, month, day;
+  if (dateStr) {
+    [year, month, day] = dateStr.split('-').map(Number);
+  } else {
+    const pl = new Date(now.getTime() + polandOffset * 3600000);
+    year = pl.getUTCFullYear();
+    month = pl.getUTCMonth() + 1;
+    day = pl.getUTCDate();
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const startISO = `${year}-${pad(month)}-${pad(day)}T00:00:00`;
+  const endISO   = `${year}-${pad(month)}-${pad(day)}T23:59:59`;
+
+  // Zamień na UTC timestamp
+  const startUTC = new Date(startISO + (polandOffset >= 0 ? `+0${polandOffset}:00` : `-0${Math.abs(polandOffset)}:00`));
+  const endUTC   = new Date(endISO   + (polandOffset >= 0 ? `+0${polandOffset}:00` : `-0${Math.abs(polandOffset)}:00`));
+
+  return {
+    gte: Math.floor(startUTC.getTime() / 1000),
+    lte: Math.floor(endUTC.getTime() / 1000),
+  };
+}
+
+// Polska strefa: UTC+1 (zima) lub UTC+2 (lato)
+function getPLOffset(date) {
+  const jan = new Date(date.getFullYear(), 0, 1).getTimezoneOffset();
+  const jul = new Date(date.getFullYear(), 6, 1).getTimezoneOffset();
+  const isDST = date.getTimezoneOffset() < Math.max(jan, jul);
+  return isDST ? 2 : 1;
+}
+
+// ============================================
+// 6. STATYSTYKI — z obsługą daty i strefy PL
 // ============================================
 app.get('/api/stats/:accountId', async (req, res) => {
   try {
     const { accountId } = req.params;
+    const { date } = req.query; // opcjonalne: YYYY-MM-DD
 
-    // Pobranie dzisiejszych transakcji
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const bounds = getPolandDayBounds(date || null);
 
     const charges = await stripe.charges.list(
-      {
-        created: { gte: Math.floor(todayStart.getTime() / 1000) },
-        limit: 100,
-      },
+      { created: bounds, limit: 100 },
       { stripeAccount: accountId }
     );
 
@@ -196,7 +231,7 @@ app.get('/api/stats/:accountId', async (req, res) => {
         total: totalAmount,
         count: count,
         average: average,
-        netAfterStripeFee: totalAmount * 0.986, // po prowizji Stripe ~1.4%
+        netAfterStripeFee: totalAmount * 0.986,
       },
     });
   } catch (error) {
