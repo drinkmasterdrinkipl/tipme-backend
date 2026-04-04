@@ -86,6 +86,34 @@ app.get('/api/account-status/:accountId', async (req, res) => {
 });
 
 // ============================================
+// 3a. LOCATION — tworzenie lokalizacji dla Stripe Terminal
+// Wymagane przed pierwszym użyciem Tap to Pay
+// ============================================
+app.post('/api/create-location', async (req, res) => {
+  try {
+    const { stripeAccountId, displayName } = req.body;
+
+    const location = await stripe.terminal.locations.create(
+      {
+        display_name: displayName || 'Tip For Me',
+        address: {
+          country: 'PL',
+          city: 'Polska',
+          line1: '-',
+          postal_code: '00-001',
+        },
+      },
+      { stripeAccount: stripeAccountId }
+    );
+
+    res.json({ locationId: location.id });
+  } catch (error) {
+    console.error('Create location error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // 3. CONNECTION TOKEN — dla Stripe Terminal SDK
 // Aplikacja mobilna potrzebuje tego tokenu
 // aby połączyć się z Tap to Pay

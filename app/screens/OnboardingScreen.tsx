@@ -1,3 +1,4 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 // ============================================
 // OnboardingScreen.tsx — Rejestracja + Stripe Connect
 // Pierwszy ekran który widzi nowy użytkownik
@@ -10,18 +11,19 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   Linking,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../App';
+import { API_URL } from '../config';
 
-export default function OnboardingScreen({ navigation }: any) {
-  const [step, setStep] = useState<'welcome' | 'register' | 'stripe' | 'done'>('welcome');
+export default function OnboardingScreen({ navigation, onComplete }: any) {
+  const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'stripe' | 'done'>('welcome');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // ============================================
   // Rejestracja + tworzenie konta Stripe Connect
@@ -71,8 +73,23 @@ export default function OnboardingScreen({ navigation }: any) {
       const { chargesEnabled } = await res.json();
 
       if (chargesEnabled) {
+        // Utwórz lokalizację Terminal jeśli jeszcze nie ma
+        const existingLocationId = await AsyncStorage.getItem('stripeLocationId');
+        if (!existingLocationId) {
+          try {
+            const locRes = await fetch(`${API_URL}/api/create-location`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ stripeAccountId: accountId, displayName: 'Tip For Me' }),
+            });
+            const locData = await locRes.json();
+            if (locData.locationId) {
+              await AsyncStorage.setItem('stripeLocationId', locData.locationId);
+            }
+          } catch {}
+        }
         // Konto gotowe — przejdź do aplikacji
-        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        onComplete ? onComplete() : navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       } else {
         Alert.alert(
           'Jeszcze nie gotowe',
@@ -94,7 +111,7 @@ export default function OnboardingScreen({ navigation }: any) {
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
           <Text style={styles.logoIcon}>💜</Text>
-          <Text style={styles.logoText}>TipMe</Text>
+          <Text style={styles.logoText}>Tip For Me</Text>
           <Text style={styles.tagline}>
             Zbieraj napiwki kartą.{'\n'}Bez terminala, bez gotówki.
           </Text>
@@ -115,9 +132,59 @@ export default function OnboardingScreen({ navigation }: any) {
 
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => setStep('register')}
+            onPress={() => setStep('prepare')}
           >
             <Text style={styles.primaryBtnText}>Zacznij zbierać napiwki →</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ============================================
+  // EKRAN PRZYGOTOWANIA
+  // ============================================
+  if (step === 'prepare') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.stepIcon}>📋</Text>
+          <Text style={styles.stepTitle}>Przygotuj się</Text>
+          <Text style={styles.stepDesc}>
+            Rejestracja konta płatności zajmie około{'\n'}
+            <Text style={{ color: '#a855f7', fontWeight: '800' }}>10 minut</Text>
+            . Zrobisz to tylko raz.
+          </Text>
+
+          <View style={styles.prepareList}>
+            {[
+              ['📧', 'Adres email', 'Do założenia konta Stripe'],
+              ['🪪', 'Dowód osobisty lub paszport', 'Weryfikacja tożsamości'],
+              ['🏦', 'Numer konta bankowego (IBAN)', 'Na które trafią napiwki'],
+              ['📱', 'Telefon przy sobie', 'SMS z kodem weryfikacyjnym'],
+            ].map(([icon, title, desc], i) => (
+              <View key={i} style={styles.prepareRow}>
+                <Text style={styles.prepareIcon}>{icon}</Text>
+                <View style={styles.prepareTextWrap}>
+                  <Text style={styles.prepareTitle}>{title}</Text>
+                  <Text style={styles.prepareDesc}>{desc}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => setStep('register')}
+          >
+            <Text style={styles.primaryBtnText}>Mam wszystko, dalej →</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => setStep('welcome')}
+          >
+            <Text style={styles.secondaryBtnText}>Wróć</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -147,10 +214,32 @@ export default function OnboardingScreen({ navigation }: any) {
             onChangeText={setEmail}
           />
 
+          {/* Zgoda na regulamin — wymóg RODO */}
           <TouchableOpacity
-            style={[styles.primaryBtn, loading && styles.btnDisabled]}
+            style={styles.termsRow}
+            onPress={() => setTermsAccepted(!termsAccepted)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+              {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.termsText}>
+              Akceptuję{' '}
+              <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tipme.drinki.pl/regulamin')}>
+                Regulamin
+              </Text>
+              {' '}i{' '}
+              <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tipme.drinki.pl/polityka-prywatnosci')}>
+                Politykę Prywatności
+              </Text>
+              {' '}Tip For Me oraz przetwarzanie danych osobowych.
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, (loading || !termsAccepted) && styles.btnDisabled]}
             onPress={connectStripe}
-            disabled={loading}
+            disabled={loading || !termsAccepted}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -161,7 +250,7 @@ export default function OnboardingScreen({ navigation }: any) {
 
           <Text style={styles.infoText}>
             Stripe to bezpieczna platforma płatności.{'\n'}
-            Twoje dane są chronione przez Stripe.
+            Twoje dane są chronione przez Stripe (licencja EMI UE).
           </Text>
         </View>
       </SafeAreaView>
@@ -319,6 +408,45 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  termsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+    width: '100%',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: 'rgba(168,85,247,0.4)',
+    backgroundColor: 'rgba(168,85,247,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  checkboxChecked: {
+    backgroundColor: '#a855f7',
+    borderColor: '#a855f7',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#666',
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: '#c084fc',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
   secondaryBtn: {
     marginTop: 14,
     paddingVertical: 14,
@@ -331,5 +459,39 @@ const styles = StyleSheet.create({
     color: '#c084fc',
     fontSize: 14,
     fontWeight: '700',
+  },
+  prepareList: {
+    width: '100%',
+    marginBottom: 32,
+  },
+  prepareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(168,85,247,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.1)',
+  },
+  prepareIcon: {
+    fontSize: 24,
+    marginRight: 14,
+    width: 32,
+    textAlign: 'center',
+  },
+  prepareTextWrap: {
+    flex: 1,
+  },
+  prepareTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#e0d4f7',
+    marginBottom: 2,
+  },
+  prepareDesc: {
+    fontSize: 12,
+    color: '#555',
   },
 });

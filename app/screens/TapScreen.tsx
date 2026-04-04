@@ -1,75 +1,60 @@
-// ============================================
-// TapScreen.tsx — Ekran Tap to Pay (NFC)
-// Tutaj klient przykłada kartę do telefonu
-// ============================================
-
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import {
-  useStripeTerminal,
-  CommonError,
-} from '@stripe/stripe-terminal-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { useStripeTerminal, ErrorCode } from '@stripe/stripe-terminal-react-native';
+import type { Reader } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../App';
+import { API_URL } from '../config';
+import { C } from '../theme';
 
 export default function TapScreen({ navigation, route }: any) {
-  const { amount } = route.params; // kwota w groszach
+  const { amount } = route.params;
   const amountZl = (amount / 100).toFixed(0);
-
   const [status, setStatus] = useState<'connecting' | 'ready' | 'processing' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
+  const discoveredRef = useRef<Reader.Type[]>([]);
 
   const {
+    initialize,
     discoverReaders,
-    connectLocalMobileReader,
-    createPaymentIntent,
+    connectReader,
     collectPaymentMethod,
     confirmPaymentIntent,
-  } = useStripeTerminal();
+    retrievePaymentIntent,
+  } = useStripeTerminal({
+    onUpdateDiscoveredReaders: (readers) => {
+      discoveredRef.current = readers;
+    },
+  });
 
-  useEffect(() => {
-    initializeReader();
-  }, []);
+  useEffect(() => { initializeReader(); }, []);
 
-  // ============================================
-  // KROK 1: Połącz z czytnikiem Tap to Pay
-  // (wbudowany NFC w iPhone)
-  // ============================================
   const initializeReader = async () => {
     try {
       setStatus('connecting');
+      discoveredRef.current = [];
 
-      // Odkryj lokalny czytnik (NFC w telefonie)
-      const { readerDiscoveries, error: discoverError } = await discoverReaders({
-        discoveryMethod: 'localMobile',
-        simulated: false, // zmień na true do testowania
+      await initialize();
+
+      const { error: discoverError } = await discoverReaders({
+        discoveryMethod: 'tapToPay',
+        simulated: false,
       });
+      if (discoverError) throw new Error(discoverError.message);
 
-      if (discoverError) {
-        throw new Error(discoverError.message);
-      }
+      // Poczekaj chwilę na wykrycie czytnika
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      if (!readerDiscoveries || readerDiscoveries.length === 0) {
-        throw new Error('Nie znaleziono czytnika NFC');
-      }
+      const readers = discoveredRef.current;
+      if (!readers || readers.length === 0) throw new Error('Nie znaleziono czytnika NFC');
 
-      // Połącz z pierwszym dostępnym czytnikiem
-      const { reader, error: connectError } = await connectLocalMobileReader({
-        reader: readerDiscoveries[0],
-        locationId: 'tml_xxx', // ID lokalizacji z Stripe Terminal
+      const locationId = await AsyncStorage.getItem('stripeLocationId') ?? '';
+      const { error: connectError } = await connectReader({
+        discoveryMethod: 'tapToPay',
+        reader: readers[0],
+        locationId,
       });
-
-      if (connectError) {
-        throw new Error(connectError.message);
-      }
+      if (connectError) throw new Error(connectError.message);
 
       setStatus('ready');
     } catch (error: any) {
@@ -78,56 +63,47 @@ export default function TapScreen({ navigation, route }: any) {
     }
   };
 
-  // ============================================
-  // KROK 2: Procesuj płatność
-  // ============================================
   const processPayment = async () => {
     try {
       setStatus('processing');
-
       const accountId = await AsyncStorage.getItem('stripeAccountId');
 
-      // 2a. Utwórz Payment Intent na serwerze
+      // Utwórz PaymentIntent na serwerze
       const res = await fetch(`${API_URL}/api/create-payment-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: amount,
-          stripeAccountId: accountId,
-        }),
+        body: JSON.stringify({ amount, stripeAccountId: accountId }),
       });
-
       const { clientSecret, error: serverError } = await res.json();
       if (serverError) throw new Error(serverError);
 
-      // 2b. Zbierz metodę płatności (klient przykłada kartę)
-      // Tu Stripe Terminal przejmuje ekran i pokazuje animację NFC
-      const { paymentIntent: collectedPI, error: collectError } =
-        await collectPaymentMethod({ clientSecret });
+      // Pobierz PaymentIntent po client secret
+      const { paymentIntent: retrievedPI, error: retrieveError } = await retrievePaymentIntent(clientSecret);
+      if (retrieveError) throw new Error(retrieveError.message);
 
+      // Zbierz metodę płatności
+      const { paymentIntent: collectedPI, error: collectError } = await collectPaymentMethod({
+        paymentIntent: retrievedPI!,
+      });
       if (collectError) {
-        if (collectError.code === CommonError.Canceled) {
-          setStatus('ready');
-          return;
-        }
+        if (collectError.code === ErrorCode.CANCELED) { setStatus('ready'); return; }
         throw new Error(collectError.message);
       }
 
-      // 2c. Potwierdź płatność
-      const { paymentIntent: confirmedPI, error: confirmError } =
-        await confirmPaymentIntent({ clientSecret });
+      // Potwierdź płatność
+      const { paymentIntent: confirmedPI, error: confirmError } = await confirmPaymentIntent({
+        paymentIntent: collectedPI!,
+      });
+      if (confirmError) throw new Error(confirmError.message);
 
-      if (confirmError) {
-        throw new Error(confirmError.message);
-      }
+      const charge = confirmedPI?.charges?.[0];
+      const details = charge?.paymentMethodDetails?.cardPresentDetails;
 
-      // Sukces! Przejdź do ekranu sukcesu
       navigation.replace('Success', {
         amount: amountZl,
-        paymentMethod: confirmedPI?.charges?.[0]?.paymentMethodDetails?.cardPresent?.brand || 'Karta',
-        last4: confirmedPI?.charges?.[0]?.paymentMethodDetails?.cardPresent?.last4 || '****',
+        paymentMethod: details?.brand ?? 'Karta',
+        last4: details?.last4 ?? '****',
       });
-
     } catch (error: any) {
       setStatus('error');
       setErrorMsg(error.message || 'Błąd płatności');
@@ -135,191 +111,121 @@ export default function TapScreen({ navigation, route }: any) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Przycisk powrotu */}
-      <TouchableOpacity
-        style={styles.backBtn}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.backText}>←</Text>
+    <SafeAreaView style={s.root}>
+      <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
+        <Text style={s.backIcon}>←</Text>
       </TouchableOpacity>
 
-      <View style={styles.content}>
-        {/* Kwota */}
-        <Text style={styles.amount}>{amountZl} zł</Text>
-        <Text style={styles.label}>napiwek</Text>
+      <View style={s.content}>
+        <View style={s.amountCard}>
+          <Text style={s.amountLabel}>DO ZAPŁATY</Text>
+          <Text style={s.amount}>{amountZl}<Text style={s.amountCurr}> zł</Text></Text>
+        </View>
 
-        {/* Status */}
         {status === 'connecting' && (
-          <>
-            <ActivityIndicator size="large" color="#a855f7" style={{ marginTop: 40 }} />
-            <Text style={styles.statusText}>Łączenie z NFC...</Text>
-          </>
+          <View style={s.stateWrap}>
+            <ActivityIndicator size="large" color={C.primary} />
+            <Text style={s.stateTitle}>Inicjalizacja</Text>
+            <Text style={s.stateDesc}>Przygotowywanie terminala...</Text>
+          </View>
         )}
 
         {status === 'ready' && (
-          <>
-            {/* Strefa NFC */}
-            <View style={styles.nfcZone}>
-              <Text style={styles.nfcIcon}>💳</Text>
+          <View style={s.stateWrap}>
+            <View style={s.nfcRing}>
+              <View style={s.nfcRingInner}>
+                <Text style={s.nfcSymbol}>⬡</Text>
+              </View>
             </View>
-            <Text style={styles.tapTitle}>Przyłóż kartę</Text>
-            <Text style={styles.tapDesc}>
-              Klient przykłada kartę lub telefon{'\n'}do tylnej części urządzenia
-            </Text>
-            <TouchableOpacity style={styles.tapBtn} onPress={processPayment}>
-              <Text style={styles.tapBtnText}>Rozpocznij płatność</Text>
+            <Text style={s.stateTitle}>Gotowy do płatności</Text>
+            <Text style={s.stateDesc}>Przyłóż kartę lub iPhone do tylnej części telefonu</Text>
+            <TouchableOpacity style={s.tapBtn} onPress={processPayment} activeOpacity={0.85}>
+              <Text style={s.tapBtnText}>Rozpocznij płatność</Text>
             </TouchableOpacity>
-          </>
+          </View>
         )}
 
         {status === 'processing' && (
-          <>
-            <ActivityIndicator size="large" color="#a855f7" style={{ marginTop: 40 }} />
-            <Text style={styles.statusText}>Przetwarzanie płatności...</Text>
-            <Text style={styles.statusSub}>Klient niech trzyma kartę przy telefonie</Text>
-          </>
+          <View style={s.stateWrap}>
+            <View style={s.processingRing}>
+              <ActivityIndicator size="large" color={C.primary} />
+            </View>
+            <Text style={s.stateTitle}>Przetwarzanie</Text>
+            <Text style={s.stateDesc}>Proszę trzymać kartę przy telefonie...</Text>
+          </View>
         )}
 
         {status === 'error' && (
-          <>
-            <View style={styles.errorBadge}>
-              <Text style={styles.errorIcon}>⚠️</Text>
+          <View style={s.stateWrap}>
+            <View style={s.errorRing}>
+              <Text style={s.errorSymbol}>!</Text>
             </View>
-            <Text style={styles.errorText}>{errorMsg}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={initializeReader}>
-              <Text style={styles.retryText}>Spróbuj ponownie</Text>
+            <Text style={s.stateTitle}>Błąd</Text>
+            <Text style={[s.stateDesc, { color: C.error }]}>{errorMsg}</Text>
+            <TouchableOpacity style={s.retryBtn} onPress={initializeReader}>
+              <Text style={s.retryText}>Spróbuj ponownie</Text>
             </TouchableOpacity>
-          </>
+          </View>
         )}
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0a13',
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: C.bg },
+  back: {
+    position: 'absolute', top: 60, left: 20, zIndex: 10,
+    width: 40, height: 40, borderRadius: 13,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
+    alignItems: 'center', justifyContent: 'center',
   },
-  backBtn: {
-    position: 'absolute',
-    top: 60,
-    left: 20,
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
+  backIcon: { color: C.text3, fontSize: 18 },
+  content: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  amountCard: {
+    width: '100%', alignItems: 'center', paddingVertical: 28,
+    borderRadius: 24, backgroundColor: C.card,
+    borderWidth: 1, borderColor: C.cardBorder, marginBottom: 48,
   },
-  backText: {
-    color: '#888',
-    fontSize: 18,
+  amountLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 2.5, color: C.text3, marginBottom: 8 },
+  amount: { fontSize: 56, fontWeight: '900', color: C.text1, letterSpacing: -3 },
+  amountCurr: { fontSize: 24, fontWeight: '700', color: C.text2 },
+  stateWrap: { alignItems: 'center', width: '100%' },
+  nfcRing: {
+    width: 160, height: 160, borderRadius: 80,
+    borderWidth: 1.5, borderColor: C.cardBorderActive,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 32,
   },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 30,
+  nfcRingInner: {
+    width: 120, height: 120, borderRadius: 60,
+    borderWidth: 1, borderColor: C.cardBorder,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.primaryFaint,
   },
-  amount: {
-    fontSize: 56,
-    fontWeight: '900',
-    color: '#c084fc',
-    letterSpacing: -3,
+  nfcSymbol: { fontSize: 48, color: C.primaryLight },
+  processingRing: {
+    width: 120, height: 120, borderRadius: 60,
+    borderWidth: 1.5, borderColor: C.cardBorderActive,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 32,
+    backgroundColor: C.primaryFaint,
   },
-  label: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 30,
-  },
-  nfcZone: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 2,
-    borderColor: 'rgba(168,85,247,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
-    marginBottom: 30,
-  },
-  nfcIcon: {
-    fontSize: 56,
-  },
-  tapTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#f0eef5',
-    marginBottom: 6,
-  },
-  tapDesc: {
-    fontSize: 14,
-    color: '#555',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  tapBtn: {
-    marginTop: 36,
-    paddingVertical: 16,
-    paddingHorizontal: 40,
-    borderRadius: 16,
-    backgroundColor: '#a855f7',
-    shadowColor: '#a855f7',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-  },
-  tapBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  statusText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#c084fc',
-    marginTop: 20,
-  },
-  statusSub: {
-    fontSize: 13,
-    color: '#555',
-    marginTop: 8,
-  },
-  errorBadge: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+  errorRing: {
+    width: 80, height: 80, borderRadius: 40,
     backgroundColor: 'rgba(239,68,68,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 30,
-    marginBottom: 16,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
   },
-  errorIcon: {
-    fontSize: 36,
+  errorSymbol: { fontSize: 32, fontWeight: '900', color: C.error },
+  stateTitle: { fontSize: 22, fontWeight: '800', color: C.text1, marginBottom: 8, letterSpacing: -0.5 },
+  stateDesc: { fontSize: 14, color: C.text3, textAlign: 'center', lineHeight: 22 },
+  tapBtn: {
+    marginTop: 32, paddingVertical: 18, paddingHorizontal: 48, borderRadius: 20,
+    backgroundColor: C.primary, shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 28,
   },
-  errorText: {
-    fontSize: 14,
-    color: '#ef4444',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
+  tapBtnText: { color: C.white, fontSize: 16, fontWeight: '800' },
   retryBtn: {
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(168,85,247,0.25)',
-    backgroundColor: 'rgba(168,85,247,0.1)',
+    marginTop: 20, paddingVertical: 14, paddingHorizontal: 32, borderRadius: 16,
+    borderWidth: 1.5, borderColor: C.cardBorder, backgroundColor: C.card,
   },
-  retryText: {
-    color: '#c084fc',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  retryText: { color: C.primaryLight, fontSize: 15, fontWeight: '700' },
 });

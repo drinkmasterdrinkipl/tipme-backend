@@ -1,15 +1,18 @@
 // ============================================
-// TipMe — App.tsx
+// Tip For Me — App.tsx
 // Główna aplikacja React Native
 // ============================================
 
 import React, { useEffect, useState } from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { C } from './theme';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StripeTerminalProvider } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from './config';
 
 import HomeScreen from './screens/HomeScreen';
 import TapScreen from './screens/TapScreen';
@@ -17,11 +20,7 @@ import SuccessScreen from './screens/SuccessScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import StatsScreen from './screens/StatsScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
-
-// ============================================
-// KONFIGURACJA — zmień na swój URL backendu
-// ============================================
-export const API_URL = 'https://tipme-backend-2rcv.onrender.com';
+import WalletScreen from './screens/WalletScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -45,18 +44,15 @@ function MainTabs() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#0c0a13',
-          borderTopColor: 'rgba(255,255,255,0.06)',
+          backgroundColor: C.surface,
+          borderTopColor: C.cardBorder,
           paddingBottom: 8,
           paddingTop: 8,
           height: 85,
         },
-        tabBarActiveTintColor: '#a855f7',
-        tabBarInactiveTintColor: '#555',
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '700',
-        },
+        tabBarActiveTintColor: C.primaryLight,
+        tabBarInactiveTintColor: C.text3,
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
       }}
     >
       <Tab.Screen
@@ -65,7 +61,9 @@ function MainTabs() {
         options={{
           tabBarLabel: 'Napiwek',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 22 }}>💜</Text>
+            <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: color === C.primaryLight ? C.primaryFaint : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 14, color }}>⬡</Text>
+            </View>
           ),
         }}
       />
@@ -75,7 +73,7 @@ function MainTabs() {
         options={{
           tabBarLabel: 'Historia',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 22 }}>📋</Text>
+            <Text style={{ fontSize: 18, color }}>≡</Text>
           ),
         }}
       />
@@ -85,7 +83,17 @@ function MainTabs() {
         options={{
           tabBarLabel: 'Statystyki',
           tabBarIcon: ({ color }) => (
-            <Text style={{ fontSize: 22 }}>📊</Text>
+            <Text style={{ fontSize: 16, color }}>◈</Text>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Wallet"
+        component={WalletScreen}
+        options={{
+          tabBarLabel: 'Portfel',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ fontSize: 16, color }}>◎</Text>
           ),
         }}
       />
@@ -101,30 +109,35 @@ export default function App() {
   }, []);
 
   const checkOnboarding = async () => {
-    const accountId = await AsyncStorage.getItem('stripeAccountId');
-    setIsOnboarded(!!accountId);
+    try {
+      const accountId = await AsyncStorage.getItem('stripeAccountId');
+      setIsOnboarded(!!accountId);
+    } catch {
+      setIsOnboarded(false);
+    }
   };
 
-  if (isOnboarded === null) return null; // loading
+  if (isOnboarded === null) return <View style={{ flex: 1, backgroundColor: '#0c0a13' }} />;
 
   return (
-    <StripeTerminalProvider
-      logLevel="verbose"
-      tokenProvider={fetchTokenProvider}
-    >
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {!isOnboarded ? (
-            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-          ) : (
-            <>
-              <Stack.Screen name="Main" component={MainTabs} />
-              <Stack.Screen name="Tap" component={TapScreen} />
-              <Stack.Screen name="Success" component={SuccessScreen} />
-            </>
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
+    <SafeAreaProvider>
+    <StripeTerminalProvider tokenProvider={fetchTokenProvider} logLevel="verbose">
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!isOnboarded ? (
+          <Stack.Screen name="Onboarding">
+            {(props) => <OnboardingScreen {...props} onComplete={() => setIsOnboarded(true)} />}
+          </Stack.Screen>
+        ) : (
+          <>
+            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="Tap" component={TapScreen} />
+            <Stack.Screen name="Success" component={SuccessScreen} />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
     </StripeTerminalProvider>
+    </SafeAreaProvider>
   );
 }
