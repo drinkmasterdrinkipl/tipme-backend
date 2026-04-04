@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tip For Me — Napiwki kartą. Bez terminala.</title>
+  <meta name="description" content="Zamień swój iPhone w terminal napiwkowy. Klient przykłada kartę, pieniądze trafiają od razu na Twoje konto. Zero sprzętu, zero czekania." />
+  <meta property="og:title" content="Tip For Me — Napiwki kartą. Bez terminala." />
+  <meta property="og:description" content="Zamień swój iPhone w terminal napiwkowy." />
+  <meta property="og:url" content="https://tipforme.app" />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="logo">
+        <span class="logo-icon">⬡</span>
+        <span class="logo-text">Tip For Me</span>
+      </a>
+      <div class="nav-links">
+        <a href="#jak-dziala">Jak działa</a>
+        <a href="#cennik">Cennik</a>
+        <a href="#faq">FAQ</a>
+        <a href="#pobierz" class="nav-cta">Pobierz aplikację</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-bg">
+      <div class="hero-orb hero-orb-1"></div>
+      <div class="hero-orb hero-orb-2"></div>
+      <div class="hero-orb hero-orb-3"></div>
+    </div>
+    <div class="container">
+      <div class="hero-badge">
+        <span class="badge-dot"></span>
+        Dostępne w App Store
+      </div>
+      <h1 class="hero-title">
+        Napiwki kartą.<br />
+        <span class="gradient-text">Bez terminala.</span>
+      </h1>
+      <p class="hero-subtitle">
+        Zamień swój iPhone w terminal napiwkowy. Klient przykłada kartę lub Apple Pay — pieniądze trafiają od razu na Twoje konto. Zero sprzętu, zero czekania.
+      </p>
+      <div class="hero-ctas">
+        <a href="#pobierz" class="btn-primary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          App Store
+        </a>
+        <a href="#jak-dziala" class="btn-secondary">Jak to działa →</a>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <span class="stat-val">0 zł</span>
+          <span class="stat-label">sprzęt</span>
+        </div>
+        <div class="hero-divider"></div>
+        <div class="hero-stat">
+          <span class="stat-val">5%</span>
+          <span class="stat-label">prowizja</span>
+        </div>
+        <div class="hero-divider"></div>
+        <div class="hero-stat">
+          <span class="stat-val">~1s</span>
+          <span class="stat-label">płatność</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone mockup -->
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-ui">
+            <div class="pui-header">
+              <span class="pui-brand">Tip For Me</span>
+              <span class="pui-live"><span class="pui-dot"></span>Live</span>
+            </div>
+            <div class="pui-hero">
+              <div class="pui-label">NAPIWKI DZIŚ</div>
+              <div class="pui-amount">347<span class="pui-curr"> zł</span></div>
+            </div>
+            <div class="pui-presets">
+              <div class="pui-preset">5</div>
+              <div class="pui-preset pui-preset-active">10</div>
+              <div class="pui-preset">15</div>
+              <div class="pui-preset">20</div>
+              <div class="pui-preset">30</div>
+              <div class="pui-preset">50</div>
+            </div>
+            <div class="pui-cta">Pobierz  10 zł</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JAK DZIAŁA -->
+  <section class="section" id="jak-dziala">
+    <div class="container">
+      <div class="section-label">JAK TO DZIAŁA</div>
+      <h2 class="section-title">Trzy kroki do napiwku</h2>
+      <p class="section-sub">Prościej się nie da. Twój telefon robi wszystko za Ciebie.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <div class="step-icon">📱</div>
+          <h3 class="step-title">Zarejestruj się raz</h3>
+          <p class="step-desc">Pobierz aplikację, podaj email i przejdź przez 10-minutową weryfikację Stripe. Tylko raz — potem wszystko działa automatycznie.</p>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <div class="step-icon">⬡</div>
+          <h3 class="step-title">Wybierz kwotę</h3>
+          <p class="step-desc">Wybierz gotowy preset (5, 10, 20 zł…) albo wpisz własną kwotę. Naciśnij "Pobierz" — terminal gotowy w 1 sekundę.</p>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <div class="step-icon">💳</div>
+          <h3 class="step-title">Klient przykłada kartę</h3>
+          <p class="step-desc">Zbliżeniówka, Apple Pay, Google Pay — cokolwiek. Płatność zajmuje sekundę, pieniądze lecą prosto na Twoje konto bankowe.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="section section-dark" id="features">
+    <div class="container">
+      <div class="section-label">DLACZEGO TIP FOR ME</div>
+      <h2 class="section-title">Terminal napiwkowy<br /><span class="gradient-text">już w Twoim telefonie</span></h2>
+
+      <div class="features">
+        <div class="feature-card feature-card-large">
+          <div class="feature-icon">⚡</div>
+          <h3>Pieniądze od razu</h3>
+          <p>Stripe rozlicza wypłaty bezpośrednio na Twoje konto bankowe. Żadnych pośredników, żadnego czekania — środki pojawiają się automatycznie.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Bank-level security</h3>
+          <p>Stripe przetwarza biliony dolarów rocznie. Twoje dane i dane klientów są chronione na najwyższym poziomie.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Statystyki w czasie rzeczywistym</h3>
+          <p>Historia każdego napiwku, zarobki dzienne, tygodniowe, miesięczne — wszystko w aplikacji.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🌍</div>
+          <h3>Wszystkie karty</h3>
+          <p>Visa, Mastercard, Apple Pay, Google Pay — jeśli klient ma kartę zbliżeniową, działa.</p>
+        </div>
+        <div class="feature-card feature-card-large">
+          <div class="feature-icon">💜</div>
+          <h3>Zero sprzętu</h3>
+          <p>Nie kupujesz terminala. Nie podpisujesz umów. Nie płacisz abonamentu. Pobierasz aplikację i zaczynasz — to wszystko. Płacisz tylko wtedy gdy zarabiasz.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DLA KOGO -->
+  <section class="section" id="dla-kogo">
+    <div class="container">
+      <div class="section-label">DLA KOGO</div>
+      <h2 class="section-title">Dla każdego kto<br />pracuje na napiwkach</h2>
+      <div class="professions">
+        <div class="profession">
+          <span class="profession-icon">🍷</span>
+          <span>Kelner</span>
+        </div>
+        <div class="profession">
+          <span class="profession-icon">🍸</span>
+          <span>Barman</span>
+        </div>
+        <div class="profession">
+          <span class="profession-icon">☕</span>
+          <span>Barista</span>
+        </div>
+        <div class="profession">
+          <span class="profession-icon">✂️</span>
+          <span>Fryzjer</span>
+        </div>
+        <div class="profession">
+          <span class="profession-icon">🚕</span>
+          <span>Kierowca</span>
+        </div>
+        <div class="profession">
+          <span class="profession-icon">💆</span>
+          <span>Masażysta</span>
+        </div>
+        <div class="profession">
+          <span class="profession-icon">🎸</span>
+          <span>Muzyk</span>
+        </div>
+        <div class="profession">
+          <span class="profession-icon">🏨</span>
+          <span>Hotelarz</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CENNIK -->
+  <section class="section section-dark" id="cennik">
+    <div class="container">
+      <div class="section-label">CENNIK</div>
+      <h2 class="section-title">Płacisz tylko gdy zarabiasz</h2>
+      <p class="section-sub">Zero abonamentu. Zero opłat za rejestrację. Tylko prosta prowizja od napiwku.</p>
+
+      <div class="pricing">
+        <div class="pricing-card">
+          <div class="pricing-badge">Jedyna opcja</div>
+          <div class="pricing-name">Pay as you go</div>
+          <div class="pricing-amount">5<span class="pricing-percent">%</span></div>
+          <div class="pricing-per">od każdego napiwku</div>
+          <div class="pricing-divider"></div>
+          <ul class="pricing-features">
+            <li><span class="check">✓</span> Brak abonamentu miesięcznego</li>
+            <li><span class="check">✓</span> Brak opłaty za rejestrację</li>
+            <li><span class="check">✓</span> Brak opłaty za sprzęt</li>
+            <li><span class="check">✓</span> Wypłaty automatyczne na konto</li>
+            <li><span class="check">✓</span> Statystyki i historia transakcji</li>
+            <li><span class="check">✓</span> Wsparcie Stripe (bank-level)</li>
+          </ul>
+          <a href="#pobierz" class="btn-primary" style="width:100%;text-align:center;">Zacznij za darmo</a>
+          <div class="pricing-note">+ opłata Stripe ~1.4% + 5 gr za transakcję kartową</div>
+        </div>
+
+        <div class="pricing-example">
+          <div class="example-title">Przykładowe rozliczenie</div>
+          <div class="example-row">
+            <span>Napiwek klienta</span>
+            <span class="example-val">20,00 zł</span>
+          </div>
+          <div class="example-row">
+            <span>Prowizja Tip For Me (5%)</span>
+            <span class="example-val example-minus">−1,00 zł</span>
+          </div>
+          <div class="example-row">
+            <span>Opłata Stripe (~1.4%)</span>
+            <span class="example-val example-minus">−0,33 zł</span>
+          </div>
+          <div class="example-row example-total">
+            <span>Twój zarobek netto</span>
+            <span class="example-val example-plus">18,67 zł</span>
+          </div>
+          <div class="example-note">
+            93% napiwku trafia prosto do Ciebie
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section" id="faq">
+    <div class="container">
+      <div class="section-label">FAQ</div>
+      <h2 class="section-title">Najczęstsze pytania</h2>
+      <div class="faqs">
+        <details class="faq">
+          <summary>Czy potrzebuję specjalnego sprzętu?</summary>
+          <p>Nie. Wystarczy iPhone XS lub nowszy z iOS 16+. Technologia Tap to Pay on iPhone od Apple zamienia NFC w Twoim telefonie w terminal płatniczy. Zero dodatkowego sprzętu.</p>
+        </details>
+        <details class="faq">
+          <summary>Czy to jest legalne?</summary>
+          <p>Tak. Aplikacja działa na infrastrukturze Stripe — jednej z największych i najbezpieczniejszych platform płatniczych na świecie. Stripe posiada wszelkie wymagane licencje w Polsce i UE. Ty jako użytkownik rejestrujesz konto Stripe Connect i przyjmujesz płatności legalnie.</p>
+        </details>
+        <details class="faq">
+          <summary>Kiedy otrzymam pieniądze?</summary>
+          <p>Stripe automatycznie wypłaca środki na Twoje konto bankowe zgodnie z harmonogramem (domyślnie co 2 dni robocze dla nowych kont, potem codziennie). Nie musisz nic robić ręcznie.</p>
+        </details>
+        <details class="faq">
+          <summary>Jakie karty obsługuje aplikacja?</summary>
+          <p>Wszystkie karty zbliżeniowe: Visa, Mastercard, Maestro, a także Apple Pay i Google Pay. Jeśli klient może płacić zbliżeniowo w sklepie, może też zapłacić Tip For Me.</p>
+        </details>
+        <details class="faq">
+          <summary>Czy rejestracja jest skomplikowana?</summary>
+          <p>Rejestracja trwa około 10 minut. Potrzebujesz: adresu email, dokumentu tożsamości (dowód lub paszport), numeru konta IBAN i telefonu do weryfikacji SMS. Stripe przeprowadza Cię przez każdy krok.</p>
+        </details>
+        <details class="faq">
+          <summary>Czy muszę mieć działalność gospodarczą?</summary>
+          <p>Niekoniecznie. W Polsce możesz prowadzić działalność nierejestrowaną jeśli Twoje przychody nie przekraczają 75% minimalnego wynagrodzenia miesięcznie. Stripe obsługuje zarówno osoby prywatne jak i firmy. Skonsultuj się z księgowym w kwestii rozliczenia podatkowego.</p>
+        </details>
+        <details class="faq">
+          <summary>Czy aplikacja działa na Androidzie?</summary>
+          <p>Obecnie aplikacja jest dostępna tylko na iOS (iPhone). Tap to Pay on iPhone to technologia Apple — na Androida nie ma odpowiednika. Planujemy alternatywne rozwiązanie dla Androida w przyszłości.</p>
+        </details>
+        <details class="faq">
+          <summary>Co jeśli klient nie ma karty zbliżeniowej?</summary>
+          <p>W takiej sytuacji płatność nie jest możliwa. Jednak ponad 95% kart wydanych w Polsce obsługuje płatności zbliżeniowe. W praktyce to rzadki przypadek.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA / POBIERZ -->
+  <section class="section section-cta" id="pobierz">
+    <div class="cta-orb cta-orb-1"></div>
+    <div class="cta-orb cta-orb-2"></div>
+    <div class="container" style="position:relative;z-index:1;">
+      <h2 class="cta-title">Zacznij zbierać napiwki<br /><span class="gradient-text">już dziś</span></h2>
+      <p class="cta-sub">Dołącz do kelnerów, barmanów i baristów którzy już nie pytają "ma pan/pani może gotówkę?"</p>
+      <div class="hero-ctas" style="justify-content:center;">
+        <a href="#" class="btn-primary btn-large">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          Pobierz na iPhone
+        </a>
+      </div>
+      <p class="cta-note">Dostępne na iPhone XS i nowszym · iOS 16+ · Polska</p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <a href="/" class="logo">
+            <span class="logo-icon">⬡</span>
+            <span class="logo-text">Tip For Me</span>
+          </a>
+          <p class="footer-tagline">Terminal napiwkowy w Twoim telefonie.</p>
+        </div>
+        <div class="footer-links">
+          <div class="footer-col">
+            <div class="footer-col-title">Produkt</div>
+            <a href="#jak-dziala">Jak działa</a>
+            <a href="#cennik">Cennik</a>
+            <a href="#faq">FAQ</a>
+            <a href="#pobierz">Pobierz</a>
+          </div>
+          <div class="footer-col">
+            <div class="footer-col-title">Prawne</div>
+            <a href="regulamin.html">Regulamin</a>
+            <a href="polityka-prywatnosci.html">Polityka prywatności</a>
+            <a href="rodo.html">RODO</a>
+          </div>
+          <div class="footer-col">
+            <div class="footer-col-title">Kontakt</div>
+            <a href="mailto:hello@tipforme.app">hello@tipforme.app</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 Tip For Me. Wszelkie prawa zastrzeżone.</span>
+        <span>Płatności obsługuje <a href="https://stripe.com" target="_blank" rel="noopener">Stripe</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

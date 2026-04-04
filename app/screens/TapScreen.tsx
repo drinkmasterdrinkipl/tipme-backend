@@ -12,6 +12,8 @@ export default function TapScreen({ navigation, route }: any) {
   const amountZl = (amount / 100).toFixed(0);
   const [status, setStatus] = useState<'connecting' | 'ready' | 'processing' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
+  const [initProgress, setInitProgress] = useState(0);
+  const [initStep, setInitStep] = useState('Inicjalizacja SDK...');
   const discoveredRef = useRef<Reader.Type[]>([]);
 
   const {
@@ -32,22 +34,30 @@ export default function TapScreen({ navigation, route }: any) {
   const initializeReader = async () => {
     try {
       setStatus('connecting');
+      setInitProgress(0);
       discoveredRef.current = [];
 
+      setInitStep('Inicjalizacja SDK...');
+      setInitProgress(15);
       await initialize();
 
+      setInitStep('Szukanie czytnika...');
+      setInitProgress(35);
       const { error: discoverError } = await discoverReaders({
         discoveryMethod: 'tapToPay',
         simulated: false,
       });
       if (discoverError) throw new Error(discoverError.message);
 
-      // Poczekaj chwilę na wykrycie czytnika
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      setInitStep('Wykrywanie urządzenia...');
+      setInitProgress(60);
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       const readers = discoveredRef.current;
       if (!readers || readers.length === 0) throw new Error('Nie znaleziono czytnika NFC');
 
+      setInitStep('Łączenie z czytnikiem...');
+      setInitProgress(80);
       const locationId = await AsyncStorage.getItem('stripeLocationId') ?? '';
       const { error: connectError } = await connectReader({
         discoveryMethod: 'tapToPay',
@@ -55,6 +65,10 @@ export default function TapScreen({ navigation, route }: any) {
         locationId,
       });
       if (connectError) throw new Error(connectError.message);
+
+      setInitStep('Gotowy!');
+      setInitProgress(100);
+      await new Promise(resolve => setTimeout(resolve, 400));
 
       setStatus('ready');
     } catch (error: any) {
@@ -124,9 +138,13 @@ export default function TapScreen({ navigation, route }: any) {
 
         {status === 'connecting' && (
           <View style={s.stateWrap}>
-            <ActivityIndicator size="large" color={C.primary} />
-            <Text style={s.stateTitle}>Inicjalizacja</Text>
-            <Text style={s.stateDesc}>Przygotowywanie terminala...</Text>
+            <ActivityIndicator size="large" color={C.primary} style={{ marginBottom: 24 }} />
+            <Text style={s.stateTitle}>Przygotowywanie</Text>
+            <Text style={s.stateDesc}>{initStep}</Text>
+            <View style={s.progressBar}>
+              <View style={[s.progressFill, { width: `${initProgress}%` as any }]} />
+            </View>
+            <Text style={s.progressPct}>{initProgress}%</Text>
           </View>
         )}
 
@@ -216,7 +234,13 @@ const s = StyleSheet.create({
   },
   errorSymbol: { fontSize: 32, fontWeight: '900', color: C.error },
   stateTitle: { fontSize: 22, fontWeight: '800', color: C.text1, marginBottom: 8, letterSpacing: -0.5 },
-  stateDesc: { fontSize: 14, color: C.text3, textAlign: 'center', lineHeight: 22 },
+  stateDesc: { fontSize: 14, color: C.text3, textAlign: 'center', lineHeight: 22, marginBottom: 20 },
+  progressBar: {
+    width: '100%', height: 6, backgroundColor: C.text4,
+    borderRadius: 3, overflow: 'hidden', marginTop: 8,
+  },
+  progressFill: { height: '100%', backgroundColor: C.primary, borderRadius: 3 },
+  progressPct: { fontSize: 12, color: C.text3, marginTop: 6 },
   tapBtn: {
     marginTop: 32, paddingVertical: 18, paddingHorizontal: 48, borderRadius: 20,
     backgroundColor: C.primary, shadowColor: C.primary,

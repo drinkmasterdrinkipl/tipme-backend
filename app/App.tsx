@@ -1,6 +1,5 @@
 // ============================================
 // Tip For Me — App.tsx
-// Główna aplikacja React Native
 // ============================================
 
 import React, { useEffect, useState } from 'react';
@@ -10,7 +9,7 @@ import { C } from './theme';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { StripeTerminalProvider } from '@stripe/stripe-terminal-react-native';
+import { StripeTerminalProvider, useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config';
 
@@ -21,6 +20,9 @@ import HistoryScreen from './screens/HistoryScreen';
 import StatsScreen from './screens/StatsScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import WalletScreen from './screens/WalletScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import TapToPayWelcomeScreen from './screens/TapToPayWelcomeScreen';
+import TapToPayEducationScreen from './screens/TapToPayEducationScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -36,6 +38,15 @@ const fetchTokenProvider = async () => {
   const { secret } = await response.json();
   return secret;
 };
+
+// Warm-up Stripe Terminal w tle (wymaganie Apple 1.5)
+function TerminalWarmup() {
+  const { initialize } = useStripeTerminal();
+  useEffect(() => {
+    initialize().catch(() => {});
+  }, []);
+  return null;
+}
 
 // Tabs — główna nawigacja
 function MainTabs() {
@@ -97,12 +108,23 @@ function MainTabs() {
           ),
         }}
       />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          tabBarLabel: 'Ustawienia',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ fontSize: 16, color }}>⚙</Text>
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }
 
 export default function App() {
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
+  const [showTapToPayWelcome, setShowTapToPayWelcome] = useState(false);
 
   useEffect(() => {
     checkOnboarding();
@@ -111,7 +133,12 @@ export default function App() {
   const checkOnboarding = async () => {
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
+      const welcomed = await AsyncStorage.getItem('tapToPayWelcomeShown');
       setIsOnboarded(!!accountId);
+      // Pokaż welcome jeśli zalogowany ale jeszcze nie widział (wymaganie Apple 3.3)
+      if (accountId && !welcomed) {
+        setShowTapToPayWelcome(true);
+      }
     } catch {
       setIsOnboarded(false);
     }
@@ -121,23 +148,48 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-    <StripeTerminalProvider tokenProvider={fetchTokenProvider} logLevel="verbose">
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!isOnboarded ? (
-          <Stack.Screen name="Onboarding">
-            {(props) => <OnboardingScreen {...props} onComplete={() => setIsOnboarded(true)} />}
-          </Stack.Screen>
-        ) : (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="Tap" component={TapScreen} />
-            <Stack.Screen name="Success" component={SuccessScreen} />
-          </>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
-    </StripeTerminalProvider>
+      <StripeTerminalProvider tokenProvider={fetchTokenProvider} logLevel="verbose">
+        <TerminalWarmup />
+        <NavigationContainer>
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            {!isOnboarded ? (
+              <Stack.Screen name="Onboarding">
+                {(props) => (
+                  <OnboardingScreen
+                    {...props}
+                    onComplete={() => {
+                      setIsOnboarded(true);
+                      setShowTapToPayWelcome(true);
+                    }}
+                  />
+                )}
+              </Stack.Screen>
+            ) : showTapToPayWelcome ? (
+              <Stack.Screen name="TapToPayWelcome">
+                {(props) => (
+                  <TapToPayWelcomeScreen
+                    {...props}
+                    route={{
+                      ...props.route,
+                      params: {
+                        onComplete: () => setShowTapToPayWelcome(false),
+                      },
+                    }}
+                  />
+                )}
+              </Stack.Screen>
+            ) : (
+              <>
+                <Stack.Screen name="Main" component={MainTabs} />
+                <Stack.Screen name="Tap" component={TapScreen} />
+                <Stack.Screen name="Success" component={SuccessScreen} />
+                <Stack.Screen name="TapToPayWelcome" component={TapToPayWelcomeScreen} />
+                <Stack.Screen name="TapToPayEducation" component={TapToPayEducationScreen} />
+              </>
+            )}
+          </Stack.Navigator>
+        </NavigationContainer>
+      </StripeTerminalProvider>
     </SafeAreaProvider>
   );
 }
