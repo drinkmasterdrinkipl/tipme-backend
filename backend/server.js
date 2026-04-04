@@ -1,11 +1,22 @@
 // ============================================
-// TipMe Backend — server.js
+// Tip For Me Backend — server.js
 // Node.js + Express + Stripe Connect
 // ============================================
 
 const express = require('express');
 const cors = require('cors');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const nodemailer = require('nodemailer');
+
+const mailer = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 const app = express();
 app.use(cors());
@@ -114,7 +125,7 @@ app.post('/api/create-payment-intent', async (req, res) => {
         capture_method: 'automatic',
         // To jest klucz! application_fee_amount to Twoja prowizja
         application_fee_amount: applicationFee,
-        description: 'TipMe - napiwek',
+        description: 'Tip For Me - napiwek',
       },
       {
         // Płatność idzie na konto użytkownika (connected account)
@@ -240,7 +251,132 @@ app.get('/api/stats/:accountId', async (req, res) => {
 });
 
 // ============================================
-// 7. WEBHOOK — Stripe powiadamia o zdarzeniach
+// 7. PARAGON EMAILEM — potwierdzenie dla klienta
+// ============================================
+app.post('/api/send-receipt', async (req, res) => {
+  try {
+    const { email, amount, last4, paymentMethod, date } = req.body;
+
+    await mailer.sendMail({
+      from: `"Tip For Me" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: `Potwierdzenie napiwku — ${amount} zł`,
+      html: `
+        <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0c0a13;color:#f3f0ff;padding:40px 32px;border-radius:20px;">
+          <div style="text-align:center;margin-bottom:32px;">
+            <div style="font-size:48px;margin-bottom:8px;">✓</div>
+            <h1 style="font-size:28px;font-weight:900;color:#10B981;margin:0;">Płatność przyjęta</h1>
+          </div>
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(149,76,233,0.2);border-radius:16px;padding:24px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+              <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">KWOTA</span>
+              <span style="font-size:24px;font-weight:900;color:#10B981;">${amount} zł</span>
+            </div>
+            <div style="border-top:1px solid rgba(149,76,233,0.15);padding-top:16px;display:flex;justify-content:space-between;">
+              <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">KARTA</span>
+              <span style="color:#A78BFA;font-weight:600;">${paymentMethod} ••${last4}</span>
+            </div>
+            <div style="border-top:1px solid rgba(149,76,233,0.15);padding-top:16px;margin-top:16px;display:flex;justify-content:space-between;">
+              <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">DATA</span>
+              <span style="color:#A78BFA;font-weight:600;">${date}</span>
+            </div>
+          </div>
+          <p style="color:#6B7280;font-size:12px;text-align:center;line-height:20px;">
+            Napiwek przekazany za pomocą <strong style="color:#C084FC;">Tip For Me</strong>.<br/>
+            Płatności obsługuje Stripe Payments Europe Ltd.
+          </p>
+        </div>
+      `,
+    });
+
+    res.json({ sent: true });
+  } catch (error) {
+    console.error('Email error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// 8. SALDO KONTA — ile jest dostępne do wypłaty
+// ============================================
+app.get('/api/balance/:accountId', async (req, res) => {
+  try {
+    const balance = await stripe.balance.retrieve(
+      {},
+      { stripeAccount: req.params.accountId }
+    );
+
+    const available = balance.available.find((b) => b.currency === 'pln');
+    const pending = balance.pending.find((b) => b.currency === 'pln');
+
+    res.json({
+      available: (available?.amount || 0) / 100,
+      pending: (pending?.amount || 0) / 100,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// 8. LINK DO STRIPE DASHBOARD — zarządzanie kontem
+// ============================================
+app.get('/api/dashboard-link/:accountId', async (req, res) => {
+  try {
+    const loginLink = await stripe.accounts.createLoginLink(
+      req.params.accountId
+    );
+    res.json({ url: loginLink.url });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// 9. WYPŁATA NA KONTO BANKOWE
+// Wysyła dostępne środki na konto bankowe użytkownika
+// ============================================
+app.post('/api/payout/:accountId', async (req, res) => {
+  try {
+    const { amount } = req.body; // w złotówkach, null = wypłać wszystko
+
+    // Pobierz dostępne saldo jeśli nie podano kwoty
+    let payoutAmount = amount ? Math.round(amount * 100) : null;
+    if (!payoutAmount) {
+      const balance = await stripe.balance.retrieve(
+        {},
+        { stripeAccount: req.params.accountId }
+      );
+      const available = balance.available.find((b) => b.currency === 'pln');
+      payoutAmount = available?.amount || 0;
+    }
+
+    if (payoutAmount < 200) { // min 2 zł
+      return res.status(400).json({ error: 'Minimalna wypłata to 2 zł' });
+    }
+
+    const payout = await stripe.payouts.create(
+      {
+        amount: payoutAmount,
+        currency: 'pln',
+        description: 'Tip For Me — wypłata napiwków',
+      },
+      { stripeAccount: req.params.accountId }
+    );
+
+    res.json({
+      id: payout.id,
+      amount: payout.amount / 100,
+      arrivalDate: new Date(payout.arrival_date * 1000).toISOString(),
+      status: payout.status,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// 10. WEBHOOK — Stripe powiadamia o zdarzeniach
 // (opcjonalne, ale zalecane na produkcji)
 // ============================================
 app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
@@ -278,7 +414,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════╗
-  ║   💜 TipMe Backend uruchomiony!     ║
+  ║   💜 Tip For Me Backend uruchomiony!     ║
   ║   Port: ${PORT}                         ║
   ║   Prowizja: ${PLATFORM_FEE_PERCENT * 100}%                      ║
   ╚══════════════════════════════════════╝
