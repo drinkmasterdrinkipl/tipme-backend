@@ -5,7 +5,7 @@ import {
   ActivityIndicator, Alert, Linking, RefreshControl, ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
 export default function WalletScreen() {
@@ -14,15 +14,21 @@ export default function WalletScreen() {
   const [loading, setLoading] = useState(true);
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [payouts, setPayouts] = useState<any[]>([]);
 
   const loadBalance = useCallback(async () => {
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
-      const res = await fetch(`${API_URL}/api/balance/${accountId}`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setAvailable(data.available);
-      setPending(data.pending);
+      const [balRes, payoutsRes] = await Promise.all([
+        apiFetch(`${API_URL}/api/balance/${accountId}`),
+        apiFetch(`${API_URL}/api/payouts/${accountId}`),
+      ]);
+      const balData = await balRes.json();
+      const payoutsData = await payoutsRes.json();
+      if (balData.error) throw new Error(balData.error);
+      setAvailable(balData.available);
+      setPending(balData.pending);
+      setPayouts(payoutsData.payouts || []);
     } catch {
       setAvailable(0);
       setPending(0);
@@ -52,9 +58,8 @@ export default function WalletScreen() {
             setPayoutLoading(true);
             try {
               const accountId = await AsyncStorage.getItem('stripeAccountId');
-              const res = await fetch(`${API_URL}/api/payout/${accountId}`, {
+              const res = await apiFetch(`${API_URL}/api/payout/${accountId}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ amount: null }),
               });
               const data = await res.json();
@@ -76,9 +81,30 @@ export default function WalletScreen() {
   const openDashboard = async () => {
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
-      const res = await fetch(`${API_URL}/api/dashboard-link/${accountId}`);
+      if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
+
+      const res = await apiFetch(`${API_URL}/api/dashboard-link/${accountId}`);
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Błąd serwera (${res.status})`);
+      }
+      if (!data.url) throw new Error('Serwer nie zwrócił linku do panelu');
+
+      if (data.requiresOnboarding) {
+        Alert.alert(
+          'Dokończ konfigurację',
+          'Twoje konto Stripe wymaga uzupełnienia danych przed pierwszym logowaniem.',
+          [
+            { text: 'Anuluj', style: 'cancel' },
+            { text: 'Otwórz Stripe', onPress: () => Linking.openURL(data.url) },
+          ]
+        );
+        return;
+      }
+
+      const canOpen = await Linking.canOpenURL(data.url);
+      if (!canOpen) throw new Error('Nie można otworzyć panelu Stripe na tym urządzeniu');
       await Linking.openURL(data.url);
     } catch (err: any) {
       Alert.alert('Błąd', err.message || 'Nie udało się otworzyć panelu Stripe');
@@ -141,6 +167,27 @@ export default function WalletScreen() {
               )}
             </TouchableOpacity>
 
+            {/* Historia wypłat */}
+            {payouts.length > 0 && (
+              <View style={s.payoutsSection}>
+                <Text style={s.payoutsTitle}>Historia wypłat</Text>
+                {payouts.map(p => {
+                  const statusColor = p.status === 'paid' ? C.success ?? '#22c55e' : p.status === 'failed' ? C.error : C.gold;
+                  const statusLabel = p.status === 'paid' ? 'Wypłacono' : p.status === 'failed' ? 'Błąd' : 'W toku';
+                  const date = new Date(p.arrivalDate).toLocaleDateString('pl-PL');
+                  return (
+                    <View key={p.id} style={s.payoutRow}>
+                      <View>
+                        <Text style={s.payoutDate}>{date}</Text>
+                        <Text style={[s.payoutStatus, { color: statusColor }]}>{statusLabel}</Text>
+                      </View>
+                      <Text style={s.payoutAmount}>+{p.amount.toFixed(2)} zł</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
             {/* Panel Stripe */}
             <TouchableOpacity style={s.dashboardBtn} onPress={openDashboard} activeOpacity={0.8}>
               <View style={s.dashboardBtnInner}>
@@ -196,6 +243,19 @@ const s = StyleSheet.create({
   payoutBtnDisabled: { backgroundColor: C.text4, shadowOpacity: 0 },
   payoutBtnText: { color: C.white, fontSize: 16, fontWeight: '800' },
   payoutBtnSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 3 },
+  payoutsSection: {
+    width: '100%', marginBottom: 14,
+    backgroundColor: C.card, borderRadius: 20,
+    borderWidth: 1, borderColor: C.cardBorder, padding: 20,
+  },
+  payoutsTitle: { fontSize: 13, fontWeight: '800', color: C.text2, letterSpacing: 1.5, marginBottom: 14 },
+  payoutRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder,
+  },
+  payoutDate: { fontSize: 14, color: C.text1, fontWeight: '600' },
+  payoutStatus: { fontSize: 11, fontWeight: '700', marginTop: 2 },
+  payoutAmount: { fontSize: 16, fontWeight: '800', color: C.text1 },
   dashboardBtn: {
     borderRadius: 18, borderWidth: 1, borderColor: C.cardBorder,
     backgroundColor: C.card, padding: 18, marginBottom: 24,

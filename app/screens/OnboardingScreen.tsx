@@ -14,10 +14,9 @@ import {
   Linking,
   Alert,
   ActivityIndicator,
-  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL, apiFetch } from '../config';
 
 export default function OnboardingScreen({ navigation, onComplete }: any) {
   const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'stripe' | 'done'>('welcome');
@@ -37,9 +36,8 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
     setLoading(true);
     try {
       // Utwórz konto Stripe Connect na serwerze
-      const res = await fetch(`${API_URL}/api/create-connected-account`, {
+      const res = await apiFetch(`${API_URL}/api/create-connected-account`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
 
@@ -50,10 +48,11 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       await AsyncStorage.setItem('stripeAccountId', accountId);
       await AsyncStorage.setItem('userEmail', email);
 
-      // Otwórz stronę onboardingu Stripe w przeglądarce
-      // Użytkownik wypełnia dane firmy, podaje konto bankowe
-      await Linking.openURL(onboardingUrl);
-
+      // Otwórz onboarding Stripe wewnątrz aplikacji (WebView)
+      navigation.navigate('StripeWebView', {
+        url: onboardingUrl,
+        onDone: () => setStep('stripe'),
+      });
       setStep('stripe');
     } catch (error: any) {
       Alert.alert('Błąd', error.message || 'Nie udało się połączyć ze Stripe');
@@ -69,7 +68,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
     setLoading(true);
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
-      const res = await fetch(`${API_URL}/api/account-status/${accountId}`);
+      const res = await apiFetch(`${API_URL}/api/account-status/${accountId}`);
       const { chargesEnabled } = await res.json();
 
       if (chargesEnabled) {
@@ -77,9 +76,8 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         const existingLocationId = await AsyncStorage.getItem('stripeLocationId');
         if (!existingLocationId) {
           try {
-            const locRes = await fetch(`${API_URL}/api/create-location`, {
+            const locRes = await apiFetch(`${API_URL}/api/create-location`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ stripeAccountId: accountId, displayName: 'Tip For Me' }),
             });
             const locData = await locRes.json();
@@ -89,7 +87,11 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           } catch {}
         }
         // Konto gotowe — przejdź do aplikacji
-        onComplete ? onComplete() : navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        if (onComplete) {
+          onComplete();
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+        }
       } else {
         Alert.alert(
           'Jeszcze nie gotowe',

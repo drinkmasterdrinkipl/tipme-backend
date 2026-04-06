@@ -394,6 +394,29 @@ app.get('/api/balance/:accountId', async (req, res) => {
 });
 
 // ============================================
+// 7b. HISTORIA WYPŁAT
+// ============================================
+app.get('/api/payouts/:accountId', async (req, res) => {
+  try {
+    const payouts = await stripe.payouts.list(
+      { limit: 20 },
+      { stripeAccount: req.params.accountId }
+    );
+    res.json({
+      payouts: payouts.data.map(p => ({
+        id: p.id,
+        amount: p.amount / 100,
+        status: p.status,
+        arrivalDate: new Date(p.arrival_date * 1000).toISOString(),
+        created: new Date(p.created * 1000).toISOString(),
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // 8. LINK DO STRIPE DASHBOARD — zarządzanie kontem
 // ============================================
 app.get('/api/dashboard-link/:accountId', async (req, res) => {
