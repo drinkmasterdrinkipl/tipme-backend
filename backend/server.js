@@ -102,19 +102,25 @@ app.post('/api/create-connected-account', async (req, res) => {
       return res.status(400).json({ error: 'Nieprawidłowy adres email' });
     }
 
-    // Tworzy konto Stripe Connect (Standard)
+    // Tworzy konto Stripe Connect Express (indywidualny kelner)
+    // Express = uproszczony onboarding, brak wymogu NIP/strony www
     const account = await stripe.accounts.create({
-      type: 'standard',
+      type: 'express',
       email: email,
       country: 'PL',
+      business_type: 'individual',
       capabilities: {
         card_payments: { requested: true },
         transfers: { requested: true },
       },
+      settings: {
+        payouts: {
+          schedule: { interval: 'manual' },
+        },
+      },
     });
 
-    // Generuje link do onboardingu Stripe
-    // Użytkownik przechodzi przez formularz Stripe (dane firmy, konto bankowe)
+    // Generuje link do uproszczonego onboardingu Stripe Express
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
       refresh_url: `${process.env.APP_URL}/stripe/refresh`,
