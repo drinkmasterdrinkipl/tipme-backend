@@ -51,9 +51,10 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       await AsyncStorage.setItem('userEmail', email);
 
       // Otwórz onboarding Stripe wewnątrz aplikacji (WebView)
+      // Po powrocie automatycznie sprawdź status konta
       navigation.navigate('StripeWebView', {
         url: onboardingUrl,
-        onDone: () => setStep('stripe'),
+        onDone: () => checkStripeStatus(),
       });
       setStep('stripe');
     } catch (error: any) {
@@ -395,8 +396,9 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           <Text style={styles.stepIcon}>⚡</Text>
           <Text style={styles.stepTitle}>Konfiguracja Stripe</Text>
           <Text style={styles.stepDesc}>
-            Dokończ konfigurację w przeglądarce,{'\n'}
-            a potem wróć tutaj i kliknij przycisk poniżej.
+            Dokończ formularz Stripe.{'\n'}
+            Po powrocie sprawdzimy status automatycznie.{'\n'}
+            Jeśli weryfikacja trwa — wróć za chwilę i kliknij poniżej.
           </Text>
 
           <TouchableOpacity
