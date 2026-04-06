@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // Pierwszy ekran który widzi nowy użytkownik
 // ============================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,21 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   const [lastName, setLastName] = useState('');
   const [loading, setLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [pollCount, setPollCount] = useState(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Automatyczne sprawdzanie statusu co 30s gdy jesteśmy na ekranie 'stripe'
+  useEffect(() => {
+    if (step === 'stripe') {
+      pollRef.current = setInterval(() => {
+        setPollCount(c => c + 1);
+        checkStripeStatus(true);
+      }, 30000);
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [step]);
 
   // ============================================
   // Rejestracja + tworzenie konta Stripe Connect
@@ -115,15 +130,19 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   // ============================================
   // Sprawdź czy użytkownik dokończył onboarding
   // ============================================
-  const checkStripeStatus = async () => {
-    setLoading(true);
+  const checkStripeStatus = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
-      if (!accountId) { Alert.alert('Błąd', 'Brak ID konta. Zacznij rejestrację od nowa.'); return; }
+      if (!accountId) {
+        if (!silent) Alert.alert('Błąd', 'Brak ID konta. Zacznij rejestrację od nowa.');
+        return;
+      }
       const res = await apiFetch(`${API_URL}/api/account-status/${accountId}`);
       const { chargesEnabled } = await res.json();
 
       if (chargesEnabled) {
+        if (pollRef.current) clearInterval(pollRef.current);
         // Utwórz lokalizację Terminal jeśli jeszcze nie ma
         const existingLocationId = await AsyncStorage.getItem('stripeLocationId');
         if (!existingLocationId) {
@@ -138,22 +157,18 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             }
           } catch {}
         }
-        // Konto gotowe — przejdź do aplikacji
-        if (onComplete) {
-          onComplete();
-        } else {
-          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-        }
-      } else {
+        if (onComplete) onComplete();
+        else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } else if (!silent) {
         Alert.alert(
           'Jeszcze nie gotowe',
-          'Dokończ konfigurację konta Stripe. Możesz to zrobić teraz lub później.'
+          'Stripe weryfikuje Twoje dane. Sprawdzimy automatycznie co 30 sekund — dostaniesz też email gdy konto będzie gotowe.'
         );
       }
     } catch (error) {
-      Alert.alert('Błąd', 'Nie udało się sprawdzić statusu konta');
+      if (!silent) Alert.alert('Błąd', 'Nie udało się sprawdzić statusu konta');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -394,12 +409,17 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
           <Text style={styles.stepIcon}>⚡</Text>
-          <Text style={styles.stepTitle}>Konfiguracja Stripe</Text>
+          <Text style={styles.stepTitle}>Oczekiwanie na weryfikację</Text>
           <Text style={styles.stepDesc}>
-            Dokończ formularz Stripe.{'\n'}
-            Po powrocie sprawdzimy status automatycznie.{'\n'}
-            Jeśli weryfikacja trwa — wróć za chwilę i kliknij poniżej.
+            Stripe weryfikuje Twoje dane.{'\n'}
+            Sprawdzamy automatycznie co 30 sekund.{'\n'}
+            Dostaniesz też email gdy konto będzie gotowe.
           </Text>
+          {pollCount > 0 && (
+            <Text style={{ color: '#555', fontSize: 12, marginBottom: 16 }}>
+              Sprawdzono: {pollCount}x — weryfikacja w toku...
+            </Text>
+          )}
 
           <TouchableOpacity
             style={[styles.primaryBtn, loading && styles.btnDisabled]}
