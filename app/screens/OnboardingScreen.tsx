@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 
 export default function OnboardingScreen({ navigation, onComplete }: any) {
-  const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'stripe' | 'done'>('welcome');
+  const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'login' | 'stripe' | 'done'>('welcome');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -56,6 +56,54 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       setStep('stripe');
     } catch (error: any) {
       Alert.alert('Błąd', error.message || 'Nie udało się połączyć ze Stripe');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================
+  // Logowanie istniejącym kontem Stripe
+  // ============================================
+  const loginWithEmail = async () => {
+    if (!email.includes('@')) {
+      Alert.alert('Błąd', 'Podaj poprawny adres email');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await apiFetch(`${API_URL}/api/find-account`, {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Błąd serwera');
+
+      await AsyncStorage.setItem('stripeAccountId', data.accountId);
+      await AsyncStorage.setItem('userEmail', email);
+
+      if (data.chargesEnabled) {
+        // Konto gotowe — od razu wejdź do aplikacji
+        const existingLocationId = await AsyncStorage.getItem('stripeLocationId');
+        if (!existingLocationId) {
+          try {
+            const locRes = await apiFetch(`${API_URL}/api/create-location`, {
+              method: 'POST',
+              body: JSON.stringify({ stripeAccountId: data.accountId, displayName: 'Tip For Me' }),
+            });
+            const locData = await locRes.json();
+            if (locData.locationId) {
+              await AsyncStorage.setItem('stripeLocationId', locData.locationId);
+            }
+          } catch {}
+        }
+        if (onComplete) onComplete();
+        else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } else {
+        // Konto istnieje ale onboarding nie dokończony
+        setStep('stripe');
+      }
+    } catch (error: any) {
+      Alert.alert('Błąd', error.message || 'Nie znaleziono konta');
     } finally {
       setLoading(false);
     }
@@ -138,6 +186,13 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             onPress={() => setStep('prepare')}
           >
             <Text style={styles.primaryBtnText}>Zacznij zbierać napiwki →</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => setStep('login')}
+          >
+            <Text style={styles.secondaryBtnText}>Mam już konto — zaloguj się</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -255,6 +310,53 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             Stripe to bezpieczna platforma płatności.{'\n'}
             Twoje dane są chronione przez Stripe (licencja EMI UE).
           </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ============================================
+  // EKRAN LOGOWANIA (istniejące konto)
+  // ============================================
+  if (step === 'login') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.stepIcon}>🔑</Text>
+          <Text style={styles.stepTitle}>Zaloguj się</Text>
+          <Text style={styles.stepDesc}>
+            Podaj email użyty przy rejestracji konta Stripe
+          </Text>
+
+          <TextInput
+            style={styles.emailInput}
+            placeholder="jan@example.com"
+            placeholderTextColor="#444"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={email}
+            onChangeText={setEmail}
+          />
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, (loading || !email.includes('@')) && styles.btnDisabled]}
+            onPress={loginWithEmail}
+            disabled={loading || !email.includes('@')}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryBtnText}>Zaloguj się →</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => setStep('welcome')}
+          >
+            <Text style={styles.secondaryBtnText}>Wróć</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );

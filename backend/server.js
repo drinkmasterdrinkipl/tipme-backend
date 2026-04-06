@@ -133,6 +133,30 @@ app.post('/api/create-connected-account', async (req, res) => {
 });
 
 // ============================================
+// 2a. LOGOWANIE — znajdź konto po emailu
+// ============================================
+app.post('/api/find-account', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 254) {
+      return res.status(400).json({ error: 'Nieprawidłowy adres email' });
+    }
+    const accounts = await stripe.accounts.list({ limit: 10 });
+    const match = accounts.data.find(a => a.email === email.toLowerCase().trim());
+    if (!match) {
+      return res.status(404).json({ error: 'Nie znaleziono konta dla tego emaila' });
+    }
+    res.json({
+      accountId: match.id,
+      chargesEnabled: match.charges_enabled,
+      detailsSubmitted: match.details_submitted,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // 2. SPRAWDZANIE STATUSU KONTA
 // Czy użytkownik dokończył onboarding Stripe?
 // ============================================
