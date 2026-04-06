@@ -394,6 +394,30 @@ app.get('/api/balance/:accountId', async (req, res) => {
 });
 
 // ============================================
+// 7a. SZCZEGÓŁY KONTA KELNERA
+// ============================================
+app.get('/api/account-details/:accountId', async (req, res) => {
+  try {
+    const account = await stripe.accounts.retrieve(req.params.accountId);
+    const bankAccount = account.external_accounts?.data?.[0];
+    res.json({
+      email: account.email,
+      displayName: account.settings?.dashboard?.display_name || '',
+      chargesEnabled: account.charges_enabled,
+      payoutsEnabled: account.payouts_enabled,
+      detailsSubmitted: account.details_submitted,
+      bankAccount: bankAccount ? {
+        bankName: bankAccount.bank_name || 'Bank',
+        last4: bankAccount.last4,
+        currency: bankAccount.currency?.toUpperCase(),
+      } : null,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // 7b. HISTORIA WYPŁAT
 // ============================================
 app.get('/api/payouts/:accountId', async (req, res) => {

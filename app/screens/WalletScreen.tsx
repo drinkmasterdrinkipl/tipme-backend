@@ -2,13 +2,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, Linking, RefreshControl, ScrollView,
+  ActivityIndicator, Alert, RefreshControl, ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
 export default function WalletScreen() {
+  const navigation = useNavigation<any>();
   const [available, setAvailable] = useState<number | null>(null);
   const [pending, setPending] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,27 +87,11 @@ export default function WalletScreen() {
 
       const res = await apiFetch(`${API_URL}/api/dashboard-link/${accountId}`);
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `Błąd serwera (${res.status})`);
+      if (!data.url) throw new Error('Serwer nie zwrócił linku');
 
-      if (!res.ok || data.error) {
-        throw new Error(data.error || `Błąd serwera (${res.status})`);
-      }
-      if (!data.url) throw new Error('Serwer nie zwrócił linku do panelu');
-
-      if (data.requiresOnboarding) {
-        Alert.alert(
-          'Dokończ konfigurację',
-          'Twoje konto Stripe wymaga uzupełnienia danych przed pierwszym logowaniem.',
-          [
-            { text: 'Anuluj', style: 'cancel' },
-            { text: 'Otwórz Stripe', onPress: () => Linking.openURL(data.url) },
-          ]
-        );
-        return;
-      }
-
-      const canOpen = await Linking.canOpenURL(data.url);
-      if (!canOpen) throw new Error('Nie można otworzyć panelu Stripe na tym urządzeniu');
-      await Linking.openURL(data.url);
+      // Otwórz w WebView wewnątrz aplikacji
+      navigation.navigate('StripeWebView', { url: data.url });
     } catch (err: any) {
       Alert.alert('Błąd', err.message || 'Nie udało się otworzyć panelu Stripe');
     }
@@ -134,11 +120,15 @@ export default function WalletScreen() {
                 {available?.toFixed(2)}
                 <Text style={s.balanceCurr}> zł</Text>
               </Text>
-              <View style={s.divider} />
-              <View style={s.pendingRow}>
-                <Text style={s.pendingLabel}>Oczekujące</Text>
-                <Text style={s.pendingValue}>{pending?.toFixed(2)} zł</Text>
-              </View>
+              {(pending ?? 0) > 0 && (
+                <>
+                  <View style={s.divider} />
+                  <View style={s.pendingRow}>
+                    <Text style={s.pendingLabel}>Oczekujące</Text>
+                    <Text style={s.pendingValue}>{pending?.toFixed(2)} zł</Text>
+                  </View>
+                </>
+              )}
             </View>
 
             {/* Info o oczekujących */}
@@ -162,7 +152,9 @@ export default function WalletScreen() {
               ) : (
                 <>
                   <Text style={s.payoutBtnText}>Wypłać na konto bankowe</Text>
-                  <Text style={s.payoutBtnSub}>1–2 dni robocze</Text>
+                  <Text style={s.payoutBtnSub}>
+                    {(available ?? 0) < 2 ? 'Brak środków do wypłaty' : '1–2 dni robocze'}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -188,11 +180,11 @@ export default function WalletScreen() {
               </View>
             )}
 
-            {/* Panel Stripe */}
-            <TouchableOpacity style={s.dashboardBtn} onPress={openDashboard} activeOpacity={0.8}>
+            {/* Szczegóły konta */}
+            <TouchableOpacity style={s.dashboardBtn} onPress={() => navigation.navigate('AccountDetails')} activeOpacity={0.8}>
               <View style={s.dashboardBtnInner}>
-                <Text style={s.dashboardBtnText}>Panel Stripe</Text>
-                <Text style={s.dashboardBtnSub}>Historia wypłat, ustawienia konta →</Text>
+                <Text style={s.dashboardBtnText}>Szczegóły konta</Text>
+                <Text style={s.dashboardBtnSub}>Konto bankowe, status weryfikacji →</Text>
               </View>
             </TouchableOpacity>
 
