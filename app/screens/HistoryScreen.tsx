@@ -2,7 +2,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
 interface Transaction { id: string; amount: number; paymentMethod: string; created: string; status: string; }
@@ -11,19 +11,25 @@ export default function HistoryScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [todayTotal, setTodayTotal] = useState(0);
+  const [error, setError] = useState('');
 
   useEffect(() => { loadTransactions(); }, []);
 
   const loadTransactions = async () => {
+    setError('');
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
-      const res = await fetch(`${API_URL}/api/transactions/${accountId}?limit=50`);
+      if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
+      const res = await apiFetch(`${API_URL}/api/transactions/${accountId}?limit=50`);
+      if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
       const data = await res.json();
       const txs: Transaction[] = data.transactions || [];
       setTransactions(txs);
       const todayStr = new Date().toISOString().slice(0, 10);
       setTodayTotal(txs.filter(t => t.created.slice(0, 10) === todayStr).reduce((s, t) => s + t.amount, 0));
-    } catch (e) {} finally { setLoading(false); }
+    } catch (e: any) {
+      setError(e.message || 'Nie udało się pobrać historii');
+    } finally { setLoading(false); }
   };
 
   const renderItem = ({ item, index }: { item: Transaction; index: number }) => {
@@ -61,6 +67,13 @@ export default function HistoryScreen() {
 
       {loading ? (
         <ActivityIndicator color={C.primary} style={{ marginTop: 40 }} />
+      ) : error ? (
+        <View style={s.empty}>
+          <Text style={[s.emptyTitle, { color: C.error }]}>{error}</Text>
+          <TouchableOpacity onPress={loadTransactions} style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 12, borderWidth: 1, borderColor: C.cardBorder }}>
+            <Text style={{ color: C.primaryLight, fontWeight: '700' }}>Odśwież</Text>
+          </TouchableOpacity>
+        </View>
       ) : transactions.length === 0 ? (
         <View style={s.empty}>
           <Text style={s.emptyTitle}>Brak transakcji</Text>

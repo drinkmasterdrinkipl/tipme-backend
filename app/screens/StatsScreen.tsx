@@ -2,7 +2,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -82,15 +82,21 @@ export default function StatsScreen() {
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [stats, setStats]   = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const loadStats = useCallback(async (date: string) => {
     setLoading(true);
+    setError('');
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
-      const res = await fetch(`${API_URL}/api/stats/${accountId}?date=${date}`);
+      if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
+      const res = await apiFetch(`${API_URL}/api/stats/${accountId}?date=${date}`);
+      if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
       const data = await res.json();
-      setStats(data.today);
-    } catch (e) {} finally { setLoading(false); }
+      setStats(data.today ?? null);
+    } catch (e: any) {
+      setError(e.message || 'Nie udało się pobrać statystyk');
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { loadStats(selectedDate); }, [selectedDate]);
@@ -122,6 +128,13 @@ export default function StatsScreen() {
         {/* Statystyki wybranego dnia */}
         {loading ? (
           <ActivityIndicator color={C.primary} style={{ marginTop: 32 }} />
+        ) : error ? (
+          <View style={{ alignItems: 'center', marginTop: 48, paddingHorizontal: 24 }}>
+            <Text style={{ color: C.error, fontSize: 14, textAlign: 'center' }}>{error}</Text>
+            <TouchableOpacity onPress={() => loadStats(selectedDate)} style={{ marginTop: 16, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 12, borderWidth: 1, borderColor: C.cardBorder }}>
+              <Text style={{ color: C.primaryLight, fontWeight: '700' }}>Spróbuj ponownie</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <>
             <View style={s.countCard}>

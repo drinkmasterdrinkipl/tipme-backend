@@ -18,12 +18,33 @@ const mailer = nodemailer.createTransport({
   },
 });
 
+const rateLimit = require('express-rate-limit');
+
 const app = express();
-app.use(cors());
+
+// CORS — tylko znane originy
+const allowedOrigins = ['https://tipme.drinki.pl', 'https://tipme-backend-2rcv.onrender.com'];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Przepuść requesty bez origina (aplikacja mobilna) lub ze znanych domen
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+}));
+
+// Rate limiting — max 100 requestów na 15 minut per IP
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+app.use('/api/', limiter);
+
+// Ostrzejszy limit na tworzenie kont
+const accountLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10 });
+app.use('/api/create-connected-account', accountLimiter);
 
 // Webhook musi mieć raw body PRZED express.json()
 app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   const sig = req.headers['stripe-signature'];
+  if (!sig) return res.status(400).send('Missing stripe-signature header');
+  if (!process.env.STRIPE_WEBHOOK_SECRET) return res.status(500).send('Webhook secret not configured');
   let event;
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
@@ -52,7 +73,10 @@ app.use(express.json());
 // ============================================
 app.use((req, res, next) => {
   const secret = process.env.API_SECRET;
-  if (!secret) return next(); // brak konfiguracji → tryb dev, przepuść
+  if (!secret) {
+    console.warn('⚠️  API_SECRET nie jest ustawiony — API jest otwarty!');
+    return next();
+  }
   if (req.headers['x-api-key'] !== secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -73,6 +97,10 @@ const PLATFORM_FEE_PERCENT = 0.05; // 5% — zmień na ile chcesz
 app.post('/api/create-connected-account', async (req, res) => {
   try {
     const { email } = req.body;
+
+    if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 254) {
+      return res.status(400).json({ error: 'Nieprawidłowy adres email' });
+    }
 
     // Tworzy konto Stripe Connect (Standard)
     const account = await stripe.accounts.create({
@@ -130,9 +158,16 @@ app.post('/api/create-location', async (req, res) => {
   try {
     const { stripeAccountId, displayName } = req.body;
 
+    if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
+      return res.status(400).json({ error: 'Nieprawidłowe ID konta Stripe' });
+    }
+    const safeName = (typeof displayName === 'string' && displayName.trim().length > 0)
+      ? displayName.trim().slice(0, 100)
+      : 'Tip For Me';
+
     const location = await stripe.terminal.locations.create(
       {
-        display_name: displayName || 'Tip For Me',
+        display_name: safeName,
         address: {
           country: 'PL',
           city: 'Warszawa',
@@ -225,12 +260,11 @@ app.post('/api/create-payment-intent', async (req, res) => {
 app.get('/api/transactions/:accountId', async (req, res) => {
   try {
     const { accountId } = req.params;
-    const { limit = 20 } = req.query;
+    const rawLimit = parseInt(req.query.limit) || 20;
+    const limit = Math.min(Math.max(rawLimit, 1), 100);
 
     const charges = await stripe.charges.list(
-      {
-        limit: parseInt(limit),
-      },
+      { limit },
       { stripeAccount: accountId }
     );
 

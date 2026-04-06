@@ -12,8 +12,10 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C } from '../theme';
+import { useAppContext } from '../AppContext';
 
 export default function SettingsScreen({ navigation }: any) {
+  const { onLogout } = useAppContext();
   const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -71,7 +73,7 @@ export default function SettingsScreen({ navigation }: any) {
               'stripeAccountId', 'userEmail', 'stripeLocationId',
               'tapToPayEnabled', 'tapToPayWelcomeShown', 'tapToPayEducationShown',
             ]);
-            navigation.reset({ index: 0, routes: [{ name: 'Onboarding' }] });
+            onLogout();
           },
         },
       ]

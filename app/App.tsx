@@ -45,7 +45,7 @@ const fetchTokenProvider = async () => {
 // Warm-up Stripe Terminal przy starcie (wymaganie Apple 1.5)
 function TerminalWarmup() {
   const { initialize } = useStripeTerminal();
-  useEffect(() => { initialize().catch(() => {}); }, []);
+  useEffect(() => { initialize().catch(() => {}); }, [initialize]);
   return null;
 }
 

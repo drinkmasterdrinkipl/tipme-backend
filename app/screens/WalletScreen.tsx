@@ -21,6 +21,7 @@ export default function WalletScreen() {
   const loadBalance = useCallback(async () => {
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
+      if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
       const [balRes, payoutsRes] = await Promise.all([
         apiFetch(`${API_URL}/api/balance/${accountId}`),
         apiFetch(`${API_URL}/api/payouts/${accountId}`),
@@ -60,6 +61,7 @@ export default function WalletScreen() {
             setPayoutLoading(true);
             try {
               const accountId = await AsyncStorage.getItem('stripeAccountId');
+              if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
               const res = await apiFetch(`${API_URL}/api/payout/${accountId}`, {
                 method: 'POST',
                 body: JSON.stringify({ amount: null }),

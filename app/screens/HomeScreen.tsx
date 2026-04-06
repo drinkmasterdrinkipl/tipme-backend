@@ -5,7 +5,7 @@ import {
   StyleSheet, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
 const TIP_PRESETS = [5, 10, 15, 20, 30, 50];
@@ -23,11 +23,13 @@ export default function HomeScreen({ navigation }: any) {
   const loadStats = async () => {
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
-      const res = await fetch(`${API_URL}/api/stats/${accountId}`);
+      if (!accountId) return;
+      const res = await apiFetch(`${API_URL}/api/stats/${accountId}`);
+      if (!res.ok) return;
       const data = await res.json();
-      setTodayTotal(data.today.total);
-      setTodayCount(data.today.count);
-    } catch (e) {}
+      setTodayTotal(data.today?.total ?? 0);
+      setTodayCount(data.today?.count ?? 0);
+    } catch {}
   };
 
   const selectPreset = (val: number) => { setSelectedPreset(val); setCustomAmount(''); };

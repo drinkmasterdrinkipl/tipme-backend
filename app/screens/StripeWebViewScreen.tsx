@@ -48,6 +48,11 @@ export default function StripeWebViewScreen({ route, navigation }: any) {
         javaScriptEnabled
         domStorageEnabled
         startInLoadingState={false}
+        keyboardDisplayRequiresUserAction={false}
+        allowsInlineMediaPlayback
+        scrollEnabled
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
       />
     </SafeAreaView>
   );

@@ -4,12 +4,18 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'rea
 import { useStripeTerminal, ErrorCode } from '@stripe/stripe-terminal-react-native';
 import type { Reader } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
+import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
 export default function TapScreen({ navigation, route }: any) {
-  const { amount } = route.params;
-  const amountZl = (amount / 100).toFixed(0);
+  const amount: number = route.params?.amount ?? 0;
+  if (!amount || amount <= 0) {
+    navigation.goBack();
+    return null;
+  }
+  const amountZl = (amount / 100 % 1 === 0)
+    ? (amount / 100).toFixed(0)
+    : (amount / 100).toFixed(2);
   const [status, setStatus] = useState<'connecting' | 'ready' | 'processing' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
   const [initProgress, setInitProgress] = useState(0);
@@ -17,9 +23,9 @@ export default function TapScreen({ navigation, route }: any) {
   const discoveredRef = useRef<Reader.Type[]>([]);
 
   const {
-    initialize,
     discoverReaders,
     connectReader,
+    disconnectReader,
     collectPaymentMethod,
     confirmPaymentIntent,
     retrievePaymentIntent,
@@ -29,17 +35,16 @@ export default function TapScreen({ navigation, route }: any) {
     },
   });
 
-  useEffect(() => { initializeReader(); }, []);
+  useEffect(() => {
+    initializeReader();
+    return () => { disconnectReader().catch(() => {}); };
+  }, []);
 
   const initializeReader = async () => {
     try {
       setStatus('connecting');
       setInitProgress(0);
       discoveredRef.current = [];
-
-      setInitStep('Inicjalizacja SDK...');
-      setInitProgress(15);
-      await initialize();
 
       setInitStep('Szukanie czytnika...');
       setInitProgress(35);
@@ -51,10 +56,16 @@ export default function TapScreen({ navigation, route }: any) {
 
       setInitStep('Wykrywanie urządzenia...');
       setInitProgress(60);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Czekaj maksymalnie 15s na pojawienie się czytnika NFC
+      let waited = 0;
+      while (discoveredRef.current.length === 0 && waited < 15000) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        waited += 300;
+      }
 
       const readers = discoveredRef.current;
-      if (!readers || readers.length === 0) throw new Error('Nie znaleziono czytnika NFC');
+      if (!readers || readers.length === 0) throw new Error('Nie znaleziono czytnika NFC. Upewnij się że NFC jest włączone.');
 
       setInitStep('Łączenie z czytnikiem...');
       setInitProgress(80);
@@ -81,18 +92,34 @@ export default function TapScreen({ navigation, route }: any) {
     try {
       setStatus('processing');
       const accountId = await AsyncStorage.getItem('stripeAccountId');
+      if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
 
-      // Utwórz PaymentIntent na serwerze
-      const res = await fetch(`${API_URL}/api/create-payment-intent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, stripeAccountId: accountId }),
-      });
-      const { clientSecret, error: serverError } = await res.json();
-      if (serverError) throw new Error(serverError);
+      // Unikalny klucz zapobiegający podwójnym płatnościom przy retry
+      const idempotencyKey = `tip-${Date.now()}-${Math.random().toString(36).slice(2, 11)}-${Math.random().toString(36).slice(2, 11)}`;
 
+      const controller = new AbortController();
+      const fetchTimeout = setTimeout(() => controller.abort(), 10000);
+
+      let clientSecret: string;
+      try {
+        const res = await apiFetch(`${API_URL}/api/create-payment-intent`, {
+          method: 'POST',
+          body: JSON.stringify({ amount, stripeAccountId: accountId }),
+          headers: { 'Idempotency-Key': idempotencyKey },
+          signal: controller.signal,
+        });
+        clearTimeout(fetchTimeout);
+        if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        clientSecret = data.clientSecret;
+      } catch (error: any) {
+        clearTimeout(fetchTimeout);
+        if (error.name === 'AbortError') throw new Error('Przekroczono czas oczekiwania na serwer');
+        throw error;
+      }
       // Pobierz PaymentIntent po client secret
-      const { paymentIntent: retrievedPI, error: retrieveError } = await retrievePaymentIntent(clientSecret);
+      const { paymentIntent: retrievedPI, error: retrieveError } = await retrievePaymentIntent(clientSecret!);
       if (retrieveError) throw new Error(retrieveError.message);
 
       // Zbierz metodę płatności

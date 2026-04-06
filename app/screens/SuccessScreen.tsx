@@ -1,39 +1,57 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { C } from '../theme';
-import { API_URL } from '../config';
+import { API_URL, apiFetch } from '../config';
 
 const MESSAGES = ['Dziękuję!', 'Jesteś wspaniały!', 'Super, dzięki!', 'Wielkie dzięki!', 'Doceniam to!'];
 
 export default function SuccessScreen({ navigation, route }: any) {
-  const { amount, paymentMethod, last4 } = route.params;
-  const msg = MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
-  const time = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-  const date = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ', ' + time;
+  const { amount = '0', paymentMethod = 'Karta', last4 = '****' } = route.params ?? {};
+  const [msg] = useState(() => MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
+  const now = new Date();
+  const time = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+  const date = now.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ', ' + time;
 
   const [modalVisible, setModalVisible] = useState(false);
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const mountedRef = useRef(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const sendReceipt = async () => {
     if (!email.includes('@')) return;
     setSending(true);
     try {
-      await fetch(`${API_URL}/api/send-receipt`, {
+      const res = await apiFetch(`${API_URL}/api/send-receipt`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, amount, last4, paymentMethod, date }),
       });
+      if (!res.ok) throw new Error('Błąd serwera');
+      if (!mountedRef.current) return;
       setSent(true);
-      setTimeout(() => { setModalVisible(false); setSent(false); setEmail(''); }, 1500);
-    } catch {
+      timeoutRef.current = setTimeout(() => {
+        if (!mountedRef.current) return;
+        setModalVisible(false);
+        setSent(false);
+        setEmail('');
+      }, 1500);
+    } catch (e: any) {
+      if (mountedRef.current) setSending(false);
     } finally {
-      setSending(false);
+      if (mountedRef.current) setSending(false);
     }
   };
 

@@ -22,15 +22,19 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
     try {
       await AsyncStorage.setItem('tapToPayEnabled', 'true');
       await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
+      navigation.navigate('TapToPayEducation', { onComplete });
     } finally {
       setLoading(false);
-      navigation.navigate('TapToPayEducation', { onComplete });
     }
   };
 
   const handleSkip = async () => {
     await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
-    onComplete ? onComplete() : navigation.navigate('Main');
+    if (onComplete) {
+      onComplete();
+    } else {
+      navigation.navigate('Main');
+    }
   };
 
   return (
@@ -67,10 +71,9 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
         <View style={s.termsBox}>
           <Text style={s.termsTitle}>Warunki korzystania z Tap to Pay</Text>
           <Text style={s.termsText}>
-            Korzystanie z funkcji Tap to Pay on iPhone podlega Warunkom korzystania z usług Apple
-            oraz Stripe. Akceptując, potwierdzasz że masz prawo do przyjmowania płatności w ramach
-            działalności gospodarczej i zgadzasz się na przetwarzanie danych transakcji przez Apple
-            i Stripe zgodnie z ich politykami prywatności.
+            Korzystanie z Tap to Pay on iPhone podlega Warunkom usług Apple oraz Stripe.
+            Akceptując, zgadzasz się na przetwarzanie danych transakcji przez Apple i Stripe
+            zgodnie z ich politykami prywatności.
           </Text>
 
           <TouchableOpacity

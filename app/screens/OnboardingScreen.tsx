@@ -68,6 +68,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
     setLoading(true);
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
+      if (!accountId) { Alert.alert('Błąd', 'Brak ID konta. Zacznij rejestrację od nowa.'); return; }
       const res = await apiFetch(`${API_URL}/api/account-status/${accountId}`);
       const { chargesEnabled } = await res.json();
 
