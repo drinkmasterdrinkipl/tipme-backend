@@ -569,6 +569,52 @@ app.post('/api/payout/:accountId', async (req, res) => {
   }
 });
 
+// ============================================
+// ADMIN — przegląd platformy
+// Wymaga nagłówka X-Admin-Key = ADMIN_SECRET
+// ============================================
+app.get('/api/admin/overview', async (req, res) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (!adminSecret || req.headers['x-admin-key'] !== adminSecret) {
+    return res.status(403).json({ error: 'Brak dostępu' });
+  }
+  try {
+    // Wszystkie powiązane konta Connect
+    const accounts = await stripe.accounts.list({ limit: 100 });
+    const activeAccounts = accounts.data.filter(a => a.charges_enabled).length;
+    const totalAccounts = accounts.data.length;
+
+    // Prowizje platformy (ostatnie 100)
+    const fees = await stripe.applicationFees.list({ limit: 100 });
+    const totalFees = fees.data.reduce((sum, f) => sum + f.amount, 0) / 100;
+
+    // Dzisiejsze prowizje
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
+    const todayFees = fees.data
+      .filter(f => f.created >= startOfDay)
+      .reduce((sum, f) => sum + f.amount, 0) / 100;
+
+    // Ostatnie 10 transakcji platformy
+    const recentFees = fees.data.slice(0, 10).map(f => ({
+      id: f.id,
+      amount: f.amount / 100,
+      created: new Date(f.created * 1000).toISOString(),
+      account: f.account,
+    }));
+
+    res.json({
+      totalAccounts,
+      activeAccounts,
+      totalFeesEarned: totalFees,
+      todayFees,
+      recentFees,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Webhook zarejestrowany na górze pliku (przed express.json())
 
 // ============================================
