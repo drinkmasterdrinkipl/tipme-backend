@@ -20,7 +20,44 @@ const mailer = nodemailer.createTransport({
 
 const app = express();
 app.use(cors());
+
+// Webhook musi mieć raw body PRZED express.json()
+app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      console.log('✅ Napiwek przyjęty:', event.data.object.amount / 100, 'zł');
+      break;
+    case 'account.updated':
+      console.log('👤 Konto zaktualizowane:', event.data.object.id);
+      break;
+    default:
+      console.log('Event:', event.type);
+  }
+  res.json({ received: true });
+});
+
 app.use(express.json());
+
+// ============================================
+// SECURITY — weryfikacja API key
+// Ustaw API_SECRET w zmiennych środowiskowych na Render.com
+// i tę samą wartość jako API_KEY w app/config.ts
+// ============================================
+app.use((req, res, next) => {
+  const secret = process.env.API_SECRET;
+  if (!secret) return next(); // brak konfiguracji → tryb dev, przepuść
+  if (req.headers['x-api-key'] !== secret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+});
 
 // ============================================
 // Twoja prowizja (w groszach!)
@@ -98,8 +135,8 @@ app.post('/api/create-location', async (req, res) => {
         display_name: displayName || 'Tip For Me',
         address: {
           country: 'PL',
-          city: 'Polska',
-          line1: '-',
+          city: 'Warszawa',
+          line1: 'ul. Nieznanа 1',
           postal_code: '00-001',
         },
       },
@@ -142,8 +179,18 @@ app.post('/api/create-payment-intent', async (req, res) => {
   try {
     const { amount, stripeAccountId } = req.body;
 
+    if (!amount || !Number.isInteger(amount) || amount < 100 || amount > 100000) {
+      return res.status(400).json({ error: 'Nieprawidłowa kwota (100–100 000 groszy)' });
+    }
+    if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
+      return res.status(400).json({ error: 'Nieprawidłowe ID konta Stripe' });
+    }
+
     // amount w groszach (np. 2000 = 20 zł)
     const applicationFee = Math.round(amount * PLATFORM_FEE_PERCENT);
+
+    // Idempotency key zapobiega podwójnym płatnościom przy ponowieniu requestu
+    const idempotencyKey = req.headers['idempotency-key'];
 
     const paymentIntent = await stripe.paymentIntents.create(
       {
@@ -151,13 +198,12 @@ app.post('/api/create-payment-intent', async (req, res) => {
         currency: 'pln',
         payment_method_types: ['card_present'],
         capture_method: 'automatic',
-        // To jest klucz! application_fee_amount to Twoja prowizja
         application_fee_amount: applicationFee,
         description: 'Tip For Me - napiwek',
       },
       {
-        // Płatność idzie na konto użytkownika (connected account)
         stripeAccount: stripeAccountId,
+        ...(idempotencyKey && { idempotencyKey }),
       }
     );
 
@@ -270,7 +316,8 @@ app.get('/api/stats/:accountId', async (req, res) => {
         total: totalAmount,
         count: count,
         average: average,
-        netAfterStripeFee: totalAmount * 0.986,
+        // 5% prowizja platformy + ~1.4% opłata Stripe Terminal
+      netAfterStripeFee: totalAmount * (1 - PLATFORM_FEE_PERCENT - 0.014),
       },
     });
   } catch (error) {
@@ -351,11 +398,25 @@ app.get('/api/balance/:accountId', async (req, res) => {
 // ============================================
 app.get('/api/dashboard-link/:accountId', async (req, res) => {
   try {
-    const loginLink = await stripe.accounts.createLoginLink(
-      req.params.accountId
-    );
-    res.json({ url: loginLink.url });
+    const accountId = req.params.accountId;
+    const account = await stripe.accounts.retrieve(accountId);
+
+    if (!account.details_submitted) {
+      // Onboarding niekompletny — wyślij z powrotem do formularza Stripe
+      const accountLink = await stripe.accountLinks.create({
+        account: accountId,
+        refresh_url: `${process.env.APP_URL}/stripe/refresh`,
+        return_url: `${process.env.APP_URL}/stripe/success`,
+        type: 'account_onboarding',
+      });
+      return res.json({ url: accountLink.url, requiresOnboarding: true });
+    }
+
+    // Standard accounts używają głównego dashboardu Stripe — nie Express
+    // createLoginLink działa tylko dla Express accounts
+    res.json({ url: 'https://dashboard.stripe.com/' });
   } catch (error) {
+    console.error('Dashboard link error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -403,37 +464,7 @@ app.post('/api/payout/:accountId', async (req, res) => {
   }
 });
 
-// ============================================
-// 10. WEBHOOK — Stripe powiadamia o zdarzeniach
-// (opcjonalne, ale zalecane na produkcji)
-// ============================================
-app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      console.log('✅ Napiwek przyjęty:', event.data.object.amount / 100, 'zł');
-      break;
-    case 'account.updated':
-      console.log('👤 Konto zaktualizowane:', event.data.object.id);
-      break;
-    default:
-      console.log('Event:', event.type);
-  }
-
-  res.json({ received: true });
-});
+// Webhook zarejestrowany na górze pliku (przed express.json())
 
 // ============================================
 // START SERWERA
