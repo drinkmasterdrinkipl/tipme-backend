@@ -21,6 +21,8 @@ import { API_URL, apiFetch } from '../config';
 export default function OnboardingScreen({ navigation, onComplete }: any) {
   const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'login' | 'stripe' | 'done'>('welcome');
   const [email, setEmail] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [loading, setLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -38,7 +40,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       // Utwórz konto Stripe Connect na serwerze
       const res = await apiFetch(`${API_URL}/api/create-connected-account`, {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, firstName, lastName }),
       });
 
       const { accountId, onboardingUrl, error } = await res.json();
@@ -256,10 +258,31 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.stepTitle}>Twój email</Text>
+          <Text style={styles.stepTitle}>Twoje dane</Text>
           <Text style={styles.stepDesc}>
-            Użyjemy go do utworzenia Twojego konta płatności
+            Podaj dane które Stripe wstępnie wypełni za Ciebie
           </Text>
+
+          <View style={{ flexDirection: 'row', gap: 10, width: '100%', marginBottom: 10 }}>
+            <TextInput
+              style={[styles.emailInput, { flex: 1, marginBottom: 0 }]}
+              placeholder="Imię"
+              placeholderTextColor="#444"
+              autoCapitalize="words"
+              autoCorrect={false}
+              value={firstName}
+              onChangeText={setFirstName}
+            />
+            <TextInput
+              style={[styles.emailInput, { flex: 1, marginBottom: 0 }]}
+              placeholder="Nazwisko"
+              placeholderTextColor="#444"
+              autoCapitalize="words"
+              autoCorrect={false}
+              value={lastName}
+              onChangeText={setLastName}
+            />
+          </View>
 
           <TextInput
             style={styles.emailInput}

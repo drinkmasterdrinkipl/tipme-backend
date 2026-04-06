@@ -96,15 +96,15 @@ const PLATFORM_FEE_PERCENT = 0.05; // 5% — zmień na ile chcesz
 // ============================================
 app.post('/api/create-connected-account', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, firstName, lastName } = req.body;
 
     if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 254) {
       return res.status(400).json({ error: 'Nieprawidłowy adres email' });
     }
 
     // Tworzy konto Stripe Connect Express (indywidualny kelner)
-    // Express = uproszczony onboarding, brak wymogu NIP/strony www
-    const account = await stripe.accounts.create({
+    // Przekazujemy imię/nazwisko żeby Stripe wstępnie wypełnił formularz
+    const accountData = {
       type: 'express',
       email: email,
       country: 'PL',
@@ -114,11 +114,19 @@ app.post('/api/create-connected-account', async (req, res) => {
         transfers: { requested: true },
       },
       settings: {
-        payouts: {
-          schedule: { interval: 'manual' },
-        },
+        payouts: { schedule: { interval: 'manual' } },
       },
-    });
+    };
+
+    if (firstName || lastName) {
+      accountData.individual = {
+        ...(firstName && { first_name: firstName.trim().slice(0, 50) }),
+        ...(lastName && { last_name: lastName.trim().slice(0, 50) }),
+        email: email,
+      };
+    }
+
+    const account = await stripe.accounts.create(accountData);
 
     // Generuje link do uproszczonego onboardingu Stripe Express
     const accountLink = await stripe.accountLinks.create({
