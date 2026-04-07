@@ -107,8 +107,12 @@ export default function App() {
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem('stripeAccountId').then(id => {
-      setIsOnboarded(!!id);
+    Promise.all([
+      AsyncStorage.getItem('stripeAccountId'),
+      AsyncStorage.getItem('authToken'),
+    ]).then(([id, token]) => {
+      // Oba muszą istnieć — jeśli brak tokenu (stara wersja app), wymuś re-login
+      setIsOnboarded(!!(id && token));
     }).catch(() => setIsOnboarded(false));
   }, []);
 

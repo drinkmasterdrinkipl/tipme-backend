@@ -19,7 +19,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 
 export default function OnboardingScreen({ navigation, onComplete }: any) {
-  const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'login' | 'stripe' | 'done'>('welcome');
+  const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'login' | 'set-password' | 'stripe' | 'done'>('welcome');
+  const [migrationAccountId, setMigrationAccountId] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -121,6 +122,17 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
+
+      // Konto bez hasła — przekieruj do ustawienia hasła
+      if (res.status === 403 && data.needsPassword) {
+        setMigrationAccountId(data.accountId);
+        await AsyncStorage.setItem('stripeAccountId', data.accountId);
+        await AsyncStorage.setItem('userEmail', email);
+        setPassword('');
+        setStep('set-password');
+        return;
+      }
+
       if (!res.ok) throw new Error(data.error || 'Błąd serwera');
 
       await AsyncStorage.setItem('stripeAccountId', data.accountId);
@@ -136,6 +148,36 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       }
     } catch (error: any) {
       Alert.alert('Błąd', error.message || 'Nieprawidłowy email lub hasło');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const setPasswordForMigration = async () => {
+    if (password.length < 8) {
+      Alert.alert('Błąd', 'Hasło musi mieć minimum 8 znaków');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await apiFetch(`${API_URL}/api/auth/set-password`, {
+        method: 'POST',
+        body: JSON.stringify({ accountId: migrationAccountId, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Błąd serwera');
+
+      if (data.token) await AsyncStorage.setItem('authToken', data.token);
+      await ensureLocationId(migrationAccountId);
+
+      if (data.chargesEnabled) {
+        if (onComplete) onComplete();
+        else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } else {
+        setStep('stripe');
+      }
+    } catch (error: any) {
+      Alert.alert('Błąd', error.message || 'Nie udało się ustawić hasła');
     } finally {
       setLoading(false);
     }
@@ -476,6 +518,45 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             onPress={connectStripe}
           >
             <Text style={styles.secondaryBtnText}>Otwórz Stripe ponownie</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ============================================
+  // EKRAN USTAWIENIA HASŁA (migracja starych kont)
+  // ============================================
+  if (step === 'set-password') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.stepIcon}>🔐</Text>
+          <Text style={styles.stepTitle}>Ustaw hasło</Text>
+          <Text style={styles.stepDesc}>
+            Twoje konto wymaga ustawienia hasła aby się zalogować.
+          </Text>
+
+          <TextInput
+            style={styles.emailInput}
+            placeholder="Nowe hasło (min. 8 znaków)"
+            placeholderTextColor="#444"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={password}
+            onChangeText={setPassword}
+          />
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, (loading || password.length < 8) && styles.btnDisabled]}
+            onPress={setPasswordForMigration}
+            disabled={loading || password.length < 8}
+          >
+            {loading
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.primaryBtnText}>Ustaw hasło i zaloguj →</Text>
+            }
           </TouchableOpacity>
         </View>
       </SafeAreaView>

@@ -212,7 +212,12 @@ app.post('/api/auth/login', async (req, res) => {
     // Weryfikuj hasło
     const hash = match.metadata?.password_hash;
     if (!hash) {
-      return res.status(401).json({ error: 'Konto nie ma ustawionego hasła. Skontaktuj się z pomocą.' });
+      // Konto założone przed wprowadzeniem auth — pozwól ustawić hasło
+      return res.status(403).json({
+        error: 'Konto wymaga ustawienia hasła.',
+        needsPassword: true,
+        accountId: match.id,
+      });
     }
     const valid = await bcrypt.compare(password, hash);
     if (!valid) {
@@ -225,6 +230,35 @@ app.post('/api/auth/login', async (req, res) => {
       accountId: match.id,
       chargesEnabled: match.charges_enabled,
       detailsSubmitted: match.details_submitted,
+      token,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// AUTH — Ustawienie hasła dla kont bez hasła (migracja)
+// ============================================
+app.post('/api/auth/set-password', async (req, res) => {
+  try {
+    const { accountId, password } = req.body;
+    if (!accountId || !password || password.length < 8) {
+      return res.status(400).json({ error: 'Hasło musi mieć minimum 8 znaków' });
+    }
+
+    const account = await stripe.accounts.retrieve(accountId);
+    if (account.metadata?.password_hash) {
+      return res.status(409).json({ error: 'Konto ma już ustawione hasło. Użyj logowania.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await stripe.accounts.update(accountId, { metadata: { password_hash: passwordHash } });
+
+    const token = account.charges_enabled ? createToken(accountId, account.email) : null;
+    res.json({
+      accountId,
+      chargesEnabled: account.charges_enabled,
       token,
     });
   } catch (error) {
