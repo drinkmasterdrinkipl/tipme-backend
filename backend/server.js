@@ -202,12 +202,19 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Podaj email i hasło' });
     }
 
-    // Znajdź konto po emailu
+    // Znajdź konto po emailu — preferuj konta z charges_enabled i password_hash
     const accounts = await stripe.accounts.list({ limit: 100 });
-    const match = accounts.data.find(a => a.email === email.toLowerCase().trim());
-    if (!match) {
+    const allMatches = accounts.data.filter(a => a.email === email.toLowerCase().trim());
+    if (!allMatches.length) {
       return res.status(404).json({ error: 'Nie znaleziono konta dla tego emaila' });
     }
+    // Priorytet: enabled z hasłem > enabled bez hasła > z hasłem > pierwsze
+    const match =
+      allMatches.find(a => a.charges_enabled && a.metadata?.password_hash) ||
+      allMatches.find(a => a.charges_enabled) ||
+      allMatches.find(a => a.metadata?.password_hash) ||
+      allMatches[0];
+    console.log('🔑 login match:', match?.id, 'charges_enabled:', match?.charges_enabled, 'has_hash:', !!match?.metadata?.password_hash);
 
     // Weryfikuj hasło
     const hash = match.metadata?.password_hash;
@@ -232,6 +239,31 @@ app.post('/api/auth/login', async (req, res) => {
       detailsSubmitted: match.details_submitted,
       token,
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// CLEANUP — Usuń wszystkie Restricted (nieaktywne) konta
+// Jednorazowy endpoint — wywołaj raz, potem możesz go usunąć
+// ============================================
+app.delete('/api/cleanup-restricted-accounts', async (req, res) => {
+  try {
+    const accounts = await stripe.accounts.list({ limit: 100 });
+    const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
+    const restricted = accounts.data.filter(a => !a.charges_enabled && a.created < sevenDaysAgo);
+    const deleted = [];
+    const errors = [];
+    for (const acc of restricted) {
+      try {
+        await stripe.accounts.del(acc.id);
+        deleted.push(acc.id);
+      } catch (e) {
+        errors.push({ id: acc.id, error: e.message });
+      }
+    }
+    res.json({ deleted, errors, total: deleted.length });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -716,6 +748,18 @@ app.post('/api/payout/:accountId', async (req, res) => {
 
 // Health check — używany przez UptimeRobot żeby serwer nie zasypiał
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+// Tymczasowy endpoint diagnostyczny — usuń po debugowaniu
+app.get('/api/debug/accounts', async (req, res) => {
+  const accounts = await stripe.accounts.list({ limit: 100 });
+  res.json(accounts.data.map(a => ({
+    id: a.id,
+    email: a.email,
+    charges_enabled: a.charges_enabled,
+    details_submitted: a.details_submitted,
+    has_hash: !!a.metadata?.password_hash,
+  })));
+});
 
 // ============================================
 // START SERWERA
