@@ -21,18 +21,30 @@ import { API_URL, apiFetch } from '../config';
 export default function OnboardingScreen({ navigation, onComplete }: any) {
   const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'login' | 'stripe' | 'done'>('welcome');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [loading, setLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [pollCount, setPollCount] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const MAX_POLLS = 240; // 240 × 30s = 2 godziny
 
   // Automatyczne sprawdzanie statusu co 30s gdy jesteśmy na ekranie 'stripe'
   useEffect(() => {
     if (step === 'stripe') {
       pollRef.current = setInterval(() => {
-        setPollCount(c => c + 1);
+        setPollCount(c => {
+          const next = c + 1;
+          if (next >= MAX_POLLS) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            Alert.alert(
+              'Weryfikacja trwa długo',
+              'Stripe nadal weryfikuje Twoje dane. Dostaniesz email gdy konto będzie gotowe — możesz zamknąć aplikację.',
+            );
+          }
+          return next;
+        });
         checkStripeStatus(true);
       }, 30000);
     }
@@ -49,16 +61,27 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       Alert.alert('Błąd', 'Podaj poprawny adres email');
       return;
     }
+    if (password.length < 8) {
+      Alert.alert('Błąd', 'Hasło musi mieć minimum 8 znaków');
+      return;
+    }
 
     setLoading(true);
     try {
-      // Utwórz konto Stripe Connect na serwerze
       const res = await apiFetch(`${API_URL}/api/create-connected-account`, {
         method: 'POST',
-        body: JSON.stringify({ email, firstName, lastName }),
+        body: JSON.stringify({ email, firstName, lastName, password }),
       });
 
       const { accountId, onboardingUrl, error } = await res.json();
+      if (res.status === 409) {
+        Alert.alert(
+          'Masz już konto',
+          'Konto z tym emailem już istnieje. Zaloguj się zamiast rejestrować.',
+          [{ text: 'Zaloguj się', onPress: () => setStep('login') }, { text: 'Anuluj', style: 'cancel' }]
+        );
+        return;
+      }
       if (error) throw new Error(error);
 
       // Zapisz ID konta lokalnie
@@ -87,44 +110,51 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       Alert.alert('Błąd', 'Podaj poprawny adres email');
       return;
     }
+    if (!password) {
+      Alert.alert('Błąd', 'Podaj hasło');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/api/find-account`, {
+      const res = await apiFetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Błąd serwera');
 
       await AsyncStorage.setItem('stripeAccountId', data.accountId);
       await AsyncStorage.setItem('userEmail', email);
+      if (data.token) await AsyncStorage.setItem('authToken', data.token);
 
       if (data.chargesEnabled) {
-        // Konto gotowe — od razu wejdź do aplikacji
-        const existingLocationId = await AsyncStorage.getItem('stripeLocationId');
-        if (!existingLocationId) {
-          try {
-            const locRes = await apiFetch(`${API_URL}/api/create-location`, {
-              method: 'POST',
-              body: JSON.stringify({ stripeAccountId: data.accountId, displayName: 'Tip For Me' }),
-            });
-            const locData = await locRes.json();
-            if (locData.locationId) {
-              await AsyncStorage.setItem('stripeLocationId', locData.locationId);
-            }
-          } catch {}
-        }
+        await ensureLocationId(data.accountId);
         if (onComplete) onComplete();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       } else {
-        // Konto istnieje ale onboarding nie dokończony
         setStep('stripe');
       }
     } catch (error: any) {
-      Alert.alert('Błąd', error.message || 'Nie znaleziono konta');
+      Alert.alert('Błąd', error.message || 'Nieprawidłowy email lub hasło');
     } finally {
       setLoading(false);
     }
+  };
+
+  // ============================================
+  // Helper — tworzy lokalizację Stripe Terminal jeśli brak
+  // ============================================
+  const ensureLocationId = async (accountId: string) => {
+    const existing = await AsyncStorage.getItem('stripeLocationId');
+    if (existing) return;
+    try {
+      const locRes = await apiFetch(`${API_URL}/api/create-location`, {
+        method: 'POST',
+        body: JSON.stringify({ stripeAccountId: accountId, displayName: 'Tip For Me' }),
+      });
+      const locData = await locRes.json();
+      if (locData.locationId) await AsyncStorage.setItem('stripeLocationId', locData.locationId);
+    } catch {}
   };
 
   // ============================================
@@ -139,24 +169,12 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         return;
       }
       const res = await apiFetch(`${API_URL}/api/account-status/${accountId}`);
-      const { chargesEnabled } = await res.json();
+      const data = await res.json();
 
-      if (chargesEnabled) {
+      if (data.chargesEnabled) {
         if (pollRef.current) clearInterval(pollRef.current);
-        // Utwórz lokalizację Terminal jeśli jeszcze nie ma
-        const existingLocationId = await AsyncStorage.getItem('stripeLocationId');
-        if (!existingLocationId) {
-          try {
-            const locRes = await apiFetch(`${API_URL}/api/create-location`, {
-              method: 'POST',
-              body: JSON.stringify({ stripeAccountId: accountId, displayName: 'Tip For Me' }),
-            });
-            const locData = await locRes.json();
-            if (locData.locationId) {
-              await AsyncStorage.setItem('stripeLocationId', locData.locationId);
-            }
-          } catch {}
-        }
+        if (data.token) await AsyncStorage.setItem('authToken', data.token);
+        await ensureLocationId(accountId);
         if (onComplete) onComplete();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       } else if (!silent) {
@@ -310,6 +328,16 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             value={email}
             onChangeText={setEmail}
           />
+          <TextInput
+            style={styles.emailInput}
+            placeholder="Hasło (min. 8 znaków)"
+            placeholderTextColor="#444"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={password}
+            onChangeText={setPassword}
+          />
 
           {/* Zgoda na regulamin — wymóg RODO */}
           <TouchableOpacity
@@ -364,7 +392,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           <Text style={styles.stepIcon}>🔑</Text>
           <Text style={styles.stepTitle}>Zaloguj się</Text>
           <Text style={styles.stepDesc}>
-            Podaj email użyty przy rejestracji konta Stripe
+            Podaj email i hasło użyte przy rejestracji
           </Text>
 
           <TextInput
@@ -377,11 +405,21 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             value={email}
             onChangeText={setEmail}
           />
+          <TextInput
+            style={styles.emailInput}
+            placeholder="Hasło"
+            placeholderTextColor="#444"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={password}
+            onChangeText={setPassword}
+          />
 
           <TouchableOpacity
-            style={[styles.primaryBtn, (loading || !email.includes('@')) && styles.btnDisabled]}
+            style={[styles.primaryBtn, (loading || !email.includes('@') || !password) && styles.btnDisabled]}
             onPress={loginWithEmail}
-            disabled={loading || !email.includes('@')}
+            disabled={loading || !email.includes('@') || !password}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />

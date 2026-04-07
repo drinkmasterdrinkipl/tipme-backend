@@ -34,6 +34,8 @@ const PARTICLES = [
   { top: 140, left: 250, size: 1.5, op: 0.4 },
 ];
 
+const SIMULATED = false;
+
 export default function TapScreen({ navigation, route }: any) {
   const amount: number = route.params?.amount ?? 0;
   if (!amount || amount <= 0) {
@@ -91,8 +93,24 @@ export default function TapScreen({ navigation, route }: any) {
     try {
       setStatus('connecting');
       setInitProgress(0);
-      discoveredRef.current = [];
 
+      if (SIMULATED) {
+        setInitStep('Szukanie czytnika...');
+        setInitProgress(35);
+        await new Promise(r => setTimeout(r, 800));
+        setInitStep('Wykrywanie urządzenia...');
+        setInitProgress(60);
+        await new Promise(r => setTimeout(r, 600));
+        setInitStep('Łączenie...');
+        setInitProgress(80);
+        await new Promise(r => setTimeout(r, 600));
+        setInitProgress(100);
+        await new Promise(r => setTimeout(r, 300));
+        setStatus('ready');
+        return;
+      }
+
+      discoveredRef.current = [];
       setInitStep('Szukanie czytnika...');
       setInitProgress(35);
       const { error: discoverError } = await discoverReaders({ discoveryMethod: 'tapToPay', simulated: false });
@@ -112,7 +130,8 @@ export default function TapScreen({ navigation, route }: any) {
 
       setInitStep('Łączenie...');
       setInitProgress(80);
-      const locationId = await AsyncStorage.getItem('stripeLocationId') ?? '';
+      const locationId = await AsyncStorage.getItem('stripeLocationId');
+      if (!locationId) throw new Error('Brak lokalizacji Stripe. Wyloguj się i zaloguj ponownie.');
       const { error: connectError } = await connectReader({ discoveryMethod: 'tapToPay', reader: readers[0], locationId });
       if (connectError) throw new Error(connectError.message);
 
@@ -128,6 +147,17 @@ export default function TapScreen({ navigation, route }: any) {
   const processPayment = async () => {
     try {
       setStatus('processing');
+
+      if (SIMULATED) {
+        await new Promise(r => setTimeout(r, 2500));
+        navigation.replace('Success', {
+          amount: amountZl,
+          paymentMethod: 'Visa',
+          last4: '4242',
+        });
+        return;
+      }
+
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
 
@@ -200,7 +230,7 @@ export default function TapScreen({ navigation, route }: any) {
           }]} />
         ))}
 
-        {/* Kontener kółek — wyśrodkowany */}
+        {/* Kontener kółek z napisem na dole */}
         <View style={s.ringContainer}>
           <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
           <View style={s.ringInner}>
@@ -210,10 +240,9 @@ export default function TapScreen({ navigation, route }: any) {
               resizeMode="contain"
             />
           </View>
+          {/* Napis na dole kółka */}
+          <Text style={s.hint}>Zbliż tutaj, aby zapłacić</Text>
         </View>
-
-        {/* Napis POD kółkiem */}
-        <Text style={s.hint}>Zbliż tutaj, aby zapłacić</Text>
 
 
         {status === 'connecting' && (
@@ -225,35 +254,84 @@ export default function TapScreen({ navigation, route }: any) {
       </View>
 
       {/* Karta dolna */}
-      <View style={s.card}>
-        <View style={s.cardTop}>
-          <View style={s.cardIcon}>
-            <Text style={s.cardIconEmoji}>💜</Text>
+      <View style={s.cardWrapper}>
+        <View style={s.card}>
+
+          {/* Merchant header */}
+          <View style={s.merchantRow}>
+            <View style={s.merchantInfo}>
+              <Text style={s.merchantName}>Tip For Me</Text>
+              <View style={s.verifiedBadge}>
+                <View style={s.verifiedDot} />
+                <Text style={s.verifiedText}>Zweryfikowany odbiorca</Text>
+              </View>
+            </View>
           </View>
-          <View>
-            <Text style={s.cardName}>Tip For Me</Text>
-            <Text style={s.cardAmount}>{amountZl}<Text style={s.cardCurr}> zł</Text></Text>
+
+          {/* Kwota */}
+          <View style={s.amountBlock}>
+            <Text style={s.amountLabel}>Do zapłaty</Text>
+            <Text style={s.amountValue}>{amountZl}<Text style={s.amountCurr}> zł</Text></Text>
           </View>
+
+          {/* Status bar */}
+          {status === 'connecting' && (
+            <View style={s.progressBar}>
+              <View style={[s.progressFill, { width: `${initProgress}%` as any }]} />
+            </View>
+          )}
+          {status === 'processing' && (
+            <View style={s.statusPill}>
+              <ActivityIndicator size="small" color="#a78bfa" style={{ marginRight: 8 }} />
+              <Text style={s.statusPillText}>Oczekiwanie na płatność...</Text>
+            </View>
+          )}
+          {status === 'error' && (
+            <>
+              <View style={s.errorPill}>
+                <Text style={s.errorPillText}>{errorMsg}</Text>
+              </View>
+              <TouchableOpacity style={s.retryBtn} onPress={initializeReader}>
+                <Text style={s.retryText}>Spróbuj ponownie</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Metody płatności + info */}
+          <View style={s.infoSection}>
+            <View style={s.infoSectionDivider} />
+
+            <Text style={s.infoSectionLabel}>Akceptowane metody płatności</Text>
+            <View style={s.methodsRow}>
+              {['VISA', 'Mastercard', 'AMEX', 'Apple Pay'].map(m => (
+                <View key={m} style={s.methodChip}>
+                  <Text style={s.methodChipText}>{m}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={s.infoGrid}>
+              <View style={s.infoGridItem}>
+                <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
+                <Text style={s.infoGridText}>Brak dodatkowego{'\n'}sprzętu</Text>
+              </View>
+              <View style={s.infoGridItem}>
+                <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
+                <Text style={s.infoGridText}>Środki trafiają{'\n'}bezpośrednio do Ciebie</Text>
+              </View>
+              <View style={s.infoGridItem}>
+                <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
+                <Text style={s.infoGridText}>Szyfrowanie{'\n'}end-to-end</Text>
+              </View>
+              <View style={s.infoGridItem}>
+                <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
+                <Text style={s.infoGridText}>Zgodność z{'\n'}normą PCI DSS</Text>
+              </View>
+            </View>
+          </View>
+
+
         </View>
-
-        {status === 'connecting' && (
-          <View style={s.progressBar}>
-            <View style={[s.progressFill, { width: `${initProgress}%` as any }]} />
-          </View>
-        )}
-
-        {status === 'processing' && (
-          <Text style={s.processingText}>Proszę trzymać kartę przy telefonie...</Text>
-        )}
-
-        {status === 'error' && (
-          <>
-            <Text style={s.errorText}>{errorMsg}</Text>
-            <TouchableOpacity style={s.retryBtn} onPress={initializeReader}>
-              <Text style={s.retryText}>Spróbuj ponownie</Text>
-            </TouchableOpacity>
-          </>
-        )}
       </View>
 
     </SafeAreaView>
@@ -274,11 +352,11 @@ const s = StyleSheet.create({
 
   // Górna strefa
   nfcZone: {
-    flex: 1,
+    height: 310,
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingTop: 0,
-    marginTop: -80,
+    marginTop: -40,
     overflow: 'hidden',
   },
   particle: {
@@ -314,8 +392,11 @@ const s = StyleSheet.create({
   nfcWaves2: { opacity: 0.7, fontSize: 36 },
   nfcWaves3: { opacity: 0.4, fontSize: 24 },
   hint: {
-    fontSize: 18, fontWeight: '700',
-    color: '#ffffff', marginBottom: 16, marginTop: 0,
+    position: 'absolute',
+    bottom: 16,
+    fontSize: 16, fontWeight: '700',
+    color: '#ffffff',
+    textAlign: 'center',
   },
   connectRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -323,45 +404,146 @@ const s = StyleSheet.create({
   connectText: { fontSize: 12, color: 'rgba(255,255,255,0.35)' },
 
   // Karta dolna
+  cardWrapper: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
   card: {
-    marginHorizontal: 16, marginBottom: 40,
     borderRadius: 28,
     backgroundColor: '#13112a',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    padding: 28,
-    alignSelf: 'center',
-    width: '92%',
+    padding: 24,
+    flex: 1,
   },
-  cardTop: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
+
+  // Merchant header
+  merchantRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 24,
   },
-  cardIcon: {
-    width: 64, height: 64, borderRadius: 18,
-    backgroundColor: '#2d1f5e',
+  merchantAvatar: {
+    width: 52, height: 52, borderRadius: 16,
+    backgroundColor: '#3b1f7a',
+    borderWidth: 1, borderColor: 'rgba(167,139,250,0.3)',
     alignItems: 'center', justifyContent: 'center',
   },
-  cardIconEmoji: { fontSize: 32 },
-  cardName: { fontSize: 14, color: 'rgba(255,255,255,0.45)', fontWeight: '600', marginBottom: 4 },
-  cardAmount: { fontSize: 52, fontWeight: '900', color: '#ffffff', letterSpacing: -1 },
-  cardCurr: { fontSize: 24, fontWeight: '700', color: 'rgba(255,255,255,0.5)' },
+  merchantAvatarText: {
+    fontSize: 22, fontWeight: '800', color: '#c4b5fd',
+  },
+  merchantInfo: { flex: 1 },
+  merchantName: {
+    fontSize: 17, fontWeight: '700', color: '#ffffff', marginBottom: 4,
+  },
+  verifiedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+  },
+  verifiedDot: {
+    width: 6, height: 6, borderRadius: 3, backgroundColor: '#34d399',
+  },
+  verifiedText: {
+    fontSize: 12, color: '#34d399', fontWeight: '600',
+  },
+
+  // Kwota
+  amountBlock: {
+    marginBottom: 20,
+  },
+  amountLabel: {
+    fontSize: 12, color: 'rgba(255,255,255,0.35)',
+    fontWeight: '600', letterSpacing: 0.8,
+    textTransform: 'uppercase', marginBottom: 4,
+  },
+  amountValue: {
+    fontSize: 58, fontWeight: '900', color: '#ffffff', letterSpacing: -2, lineHeight: 66,
+  },
+  amountCurr: {
+    fontSize: 26, fontWeight: '700', color: 'rgba(255,255,255,0.45)', letterSpacing: 0,
+  },
+
+  // Status
   progressBar: {
     width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 2, overflow: 'hidden', marginTop: 16,
+    borderRadius: 2, overflow: 'hidden', marginBottom: 12,
   },
   progressFill: { height: '100%', backgroundColor: '#7c3aed', borderRadius: 2 },
-  processingText: {
-    fontSize: 13, color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center', marginTop: 14,
+  statusPill: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 12, paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(167,139,250,0.08)',
+    borderWidth: 1, borderColor: 'rgba(167,139,250,0.15)',
+    marginBottom: 12,
   },
-  errorText: {
-    fontSize: 13, color: '#f87171',
-    textAlign: 'center', marginTop: 14, marginBottom: 12,
+  statusPillText: {
+    fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: '500',
+  },
+  errorPill: {
+    paddingVertical: 12, paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(248,113,113,0.08)',
+    borderWidth: 1, borderColor: 'rgba(248,113,113,0.2)',
+    marginBottom: 12,
+  },
+  errorPillText: {
+    fontSize: 13, color: '#f87171', textAlign: 'center', fontWeight: '500',
   },
   retryBtn: {
     paddingVertical: 14, borderRadius: 14,
     backgroundColor: 'rgba(124,58,237,0.2)',
     borderWidth: 1, borderColor: 'rgba(124,58,237,0.4)',
-    alignItems: 'center', marginTop: 4,
+    alignItems: 'center', marginBottom: 12,
   },
   retryText: { color: '#a78bfa', fontSize: 15, fontWeight: '700' },
+
+  // Info section
+  infoSection: {
+    marginTop: 20,
+  },
+  infoSectionDivider: {
+    height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginBottom: 16,
+  },
+  infoSectionLabel: {
+    fontSize: 11, color: 'rgba(255,255,255,0.25)',
+    fontWeight: '600', letterSpacing: 0.8,
+    textTransform: 'uppercase', marginBottom: 10,
+  },
+  methodsRow: {
+    flexDirection: 'row', gap: 8, marginBottom: 16,
+  },
+  methodChip: {
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  methodChipText: {
+    fontSize: 11, color: 'rgba(255,255,255,0.45)',
+    fontWeight: '700', letterSpacing: 0.5,
+  },
+  infoGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+  },
+  infoGridItem: {
+    width: '47%',
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    paddingVertical: 10, paddingHorizontal: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  infoGridIcon: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: 'rgba(52,211,153,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: 1,
+  },
+  infoGridIconText: {
+    fontSize: 10, color: '#34d399', fontWeight: '800',
+  },
+  infoGridText: {
+    fontSize: 11, color: 'rgba(255,255,255,0.35)',
+    fontWeight: '500', lineHeight: 16, flex: 1,
+  },
+
 });

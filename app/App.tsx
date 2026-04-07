@@ -26,7 +26,6 @@ import TapToPayWelcomeScreen from './screens/TapToPayWelcomeScreen';
 import TapToPayEducationScreen from './screens/TapToPayEducationScreen';
 import StripeWebViewScreen from './screens/StripeWebViewScreen';
 import AccountDetailsScreen from './screens/AccountDetailsScreen';
-import AdminScreen from './screens/AdminScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -146,7 +145,7 @@ export default function App() {
               <Stack.Screen name="Settings" component={SettingsScreen} />
               <Stack.Screen name="StripeWebView" component={StripeWebViewScreen} />
               <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
-              <Stack.Screen name="Admin" component={AdminScreen} />
+
             </Stack.Navigator>
           )}
         </NavigationContainer>

@@ -103,11 +103,14 @@ export default function StatsScreen() {
 
   const handleSelect = (date: string) => { setSelectedDate(date); };
 
-  const total   = stats?.total || 0;
-  const count   = stats?.count || 0;
-  const average = stats?.average || 0;
-  const net     = stats?.netAfterStripeFee || 0;
-  const fee     = total - net;
+  const total       = stats?.total || 0;
+  const count       = stats?.count || 0;
+  const average     = stats?.average || 0;
+  // Rzeczywiste opłaty ze Stripe (gdy SIMULATED=false)
+  // W trybie SIMULATED szacujemy dla pokazania UI
+  const stripeFee   = stats?.stripeFee   ?? (total * 0.015 + count * 0.42);
+  const platformFee = stats?.platformFee ?? total * 0.05;
+  const net         = stats?.net         ?? Math.max(0, total - stripeFee - platformFee);
 
   const isToday = selectedDate === todayStr();
   const dateLabel = isToday ? 'Dziś' : new Date(selectedDate + 'T12:00:00').toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -159,14 +162,14 @@ export default function StatsScreen() {
               <View style={s.breakdown}>
                 <Text style={s.breakdownTitle}>Rozliczenie</Text>
                 {[
-                  ['Napiwki brutto', `${total.toFixed(2)} zł`],
-                  ['Prowizja Tip For Me (5%)', `−${(total * 0.05).toFixed(2)} zł`],
-                  ['Opłata Stripe (~1.4%)', `−${(total * 0.014).toFixed(2)} zł`],
-                  ['Twój zarobek netto', `${net.toFixed(2)} zł`],
-                ].map(([label, val], i, arr) => (
+                  ['Napiwki brutto', `${total.toFixed(2)} zł`, false],
+                  ['Prowizja Tip For Me (5%)', `−${platformFee.toFixed(2)} zł`, false],
+                  ['Opłata Stripe (rzeczywista)', `−${stripeFee.toFixed(2)} zł`, false],
+                  ['Twój zarobek netto', `${net.toFixed(2)} zł`, true],
+                ].map(([label, val, highlight], i) => (
                   <View key={i} style={[s.breakdownRow, i > 0 && s.breakdownBorder]}>
-                    <Text style={s.breakdownLabel}>{label}</Text>
-                    <Text style={[s.breakdownVal, i === arr.length-1 && { color: C.success, fontWeight: '800' }]}>{val}</Text>
+                    <Text style={s.breakdownLabel}>{label as string}</Text>
+                    <Text style={[s.breakdownVal, highlight && { color: C.success, fontWeight: '800' }]}>{val as string}</Text>
                   </View>
                 ))}
               </View>

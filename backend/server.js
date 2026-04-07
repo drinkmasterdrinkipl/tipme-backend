@@ -7,6 +7,27 @@ const express = require('express');
 const cors = require('cors');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const nodemailer = require('nodemailer');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'changeme-set-JWT_SECRET-on-render';
+const JWT_EXPIRES = '365d';
+
+function createToken(accountId, email) {
+  return jwt.sign({ accountId, email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+}
+
+function authenticateToken(req, res, next) {
+  const auth = req.headers['authorization'];
+  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Brak tokenu. Zaloguj się ponownie.' });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Sesja wygasła. Zaloguj się ponownie.' });
+  }
+}
 
 const mailer = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -96,17 +117,39 @@ const PLATFORM_FEE_PERCENT = 0.05; // 5% — zmień na ile chcesz
 // ============================================
 app.post('/api/create-connected-account', async (req, res) => {
   try {
-    const { email, firstName, lastName } = req.body;
+    const { email, firstName, lastName, password } = req.body;
 
     if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 254) {
       return res.status(400).json({ error: 'Nieprawidłowy adres email' });
     }
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Hasło musi mieć minimum 8 znaków' });
+    }
 
-    // Tworzy konto Stripe Connect Express (indywidualny kelner)
-    // Przekazujemy imię/nazwisko żeby Stripe wstępnie wypełnił formularz
+    // Sprawdź czy konto z tym emailem już istnieje
+    const existing = await stripe.accounts.list({ limit: 100 });
+    const found = existing.data.find(a => a.email === email.toLowerCase().trim());
+    if (found) {
+      if (found.charges_enabled) {
+        return res.status(409).json({
+          error: 'Konto z tym emailem już istnieje. Użyj opcji "Mam już konto — zaloguj się".',
+        });
+      }
+      // Konto istnieje ale onboarding nie dokończony — wygeneruj nowy link
+      const accountLink = await stripe.accountLinks.create({
+        account: found.id,
+        refresh_url: `${process.env.APP_URL}/stripe/refresh`,
+        return_url: `${process.env.APP_URL}/stripe/success`,
+        type: 'account_onboarding',
+      });
+      return res.json({ accountId: found.id, onboardingUrl: accountLink.url });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
     const accountData = {
       type: 'express',
-      email: email,
+      email: email.toLowerCase().trim(),
       country: 'PL',
       business_type: 'individual',
       capabilities: {
@@ -116,19 +159,19 @@ app.post('/api/create-connected-account', async (req, res) => {
       settings: {
         payouts: { schedule: { interval: 'manual' } },
       },
+      metadata: { password_hash: passwordHash },
     };
 
     if (firstName || lastName) {
       accountData.individual = {
         ...(firstName && { first_name: firstName.trim().slice(0, 50) }),
         ...(lastName && { last_name: lastName.trim().slice(0, 50) }),
-        email: email,
+        email: email.toLowerCase().trim(),
       };
     }
 
     const account = await stripe.accounts.create(accountData);
 
-    // Generuje link do uproszczonego onboardingu Stripe Express
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
       refresh_url: `${process.env.APP_URL}/stripe/refresh`,
@@ -149,21 +192,40 @@ app.post('/api/create-connected-account', async (req, res) => {
 // ============================================
 // 2a. LOGOWANIE — znajdź konto po emailu
 // ============================================
-app.post('/api/find-account', async (req, res) => {
+// ============================================
+// AUTH — Logowanie (email + hasło)
+// ============================================
+app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 254) {
-      return res.status(400).json({ error: 'Nieprawidłowy adres email' });
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Podaj email i hasło' });
     }
-    const accounts = await stripe.accounts.list({ limit: 10 });
+
+    // Znajdź konto po emailu
+    const accounts = await stripe.accounts.list({ limit: 100 });
     const match = accounts.data.find(a => a.email === email.toLowerCase().trim());
     if (!match) {
       return res.status(404).json({ error: 'Nie znaleziono konta dla tego emaila' });
     }
+
+    // Weryfikuj hasło
+    const hash = match.metadata?.password_hash;
+    if (!hash) {
+      return res.status(401).json({ error: 'Konto nie ma ustawionego hasła. Skontaktuj się z pomocą.' });
+    }
+    const valid = await bcrypt.compare(password, hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Nieprawidłowe hasło' });
+    }
+
+    const token = match.charges_enabled ? createToken(match.id, email) : null;
+
     res.json({
       accountId: match.id,
       chargesEnabled: match.charges_enabled,
       detailsSubmitted: match.details_submitted,
+      token,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -177,11 +239,13 @@ app.post('/api/find-account', async (req, res) => {
 app.get('/api/account-status/:accountId', async (req, res) => {
   try {
     const account = await stripe.accounts.retrieve(req.params.accountId);
+    const token = account.charges_enabled ? createToken(account.id, account.email) : null;
 
     res.json({
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,
       detailsSubmitted: account.details_submitted,
+      token,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -208,8 +272,8 @@ app.post('/api/create-location', async (req, res) => {
         display_name: safeName,
         address: {
           country: 'PL',
-          city: 'Warszawa',
-          line1: 'ul. Nieznanа 1',
+          city: 'Polska',
+          line1: 'Mobile',
           postal_code: '00-001',
         },
       },
@@ -369,27 +433,37 @@ function getPLOffset(date) {
 app.get('/api/stats/:accountId', async (req, res) => {
   try {
     const { accountId } = req.params;
-    const { date } = req.query; // opcjonalne: YYYY-MM-DD
+    const { date } = req.query;
 
     const bounds = getPolandDayBounds(date || null);
 
-    const charges = await stripe.charges.list(
-      { created: bounds, limit: 100 },
+    // balance_transactions zawierają dokładne opłaty pobrane przez Stripe
+    const txns = await stripe.balanceTransactions.list(
+      { created: bounds, limit: 100, type: 'payment' },
       { stripeAccount: accountId }
     );
 
-    const successful = charges.data.filter((c) => c.status === 'succeeded');
-    const totalAmount = successful.reduce((sum, c) => sum + c.amount, 0) / 100;
-    const count = successful.length;
-    const average = count > 0 ? totalAmount / count : 0;
+    const successful = txns.data.filter((t) => t.status === 'available' || t.status === 'pending');
+
+    const totalAmount   = successful.reduce((sum, t) => sum + t.amount, 0) / 100;
+    const totalStripeFee = successful.reduce((sum, t) => sum + t.fee, 0) / 100;
+    const totalNet      = successful.reduce((sum, t) => sum + t.net, 0) / 100;
+    const count         = successful.length;
+    const average       = count > 0 ? totalAmount / count : 0;
+
+    // Prowizja platformy (5%) jest pobierana jako application_fee — już uwzględniona w net
+    // Pokazujemy ją osobno dla przejrzystości
+    const platformFee = totalAmount * PLATFORM_FEE_PERCENT;
+    const netAfterAll = totalNet - platformFee;
 
     res.json({
       today: {
         total: totalAmount,
-        count: count,
-        average: average,
-        // 5% prowizja platformy + ~1.4% opłata Stripe Terminal
-      netAfterStripeFee: totalAmount * (1 - PLATFORM_FEE_PERCENT - 0.014),
+        count,
+        average,
+        stripeFee: totalStripeFee,       // dokładna opłata Stripe
+        platformFee,                      // 5% prowizja Tip For Me
+        net: Math.max(0, netAfterAll),    // rzeczywisty zarobek
       },
     });
   } catch (error) {
@@ -583,51 +657,6 @@ app.post('/api/payout/:accountId', async (req, res) => {
   }
 });
 
-// ============================================
-// ADMIN — przegląd platformy
-// Wymaga nagłówka X-Admin-Key = ADMIN_SECRET
-// ============================================
-app.get('/api/admin/overview', async (req, res) => {
-  const adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret || req.headers['x-admin-key'] !== adminSecret) {
-    return res.status(403).json({ error: 'Brak dostępu' });
-  }
-  try {
-    // Wszystkie powiązane konta Connect
-    const accounts = await stripe.accounts.list({ limit: 100 });
-    const activeAccounts = accounts.data.filter(a => a.charges_enabled).length;
-    const totalAccounts = accounts.data.length;
-
-    // Prowizje platformy (ostatnie 100)
-    const fees = await stripe.applicationFees.list({ limit: 100 });
-    const totalFees = fees.data.reduce((sum, f) => sum + f.amount, 0) / 100;
-
-    // Dzisiejsze prowizje
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000;
-    const todayFees = fees.data
-      .filter(f => f.created >= startOfDay)
-      .reduce((sum, f) => sum + f.amount, 0) / 100;
-
-    // Ostatnie 10 transakcji platformy
-    const recentFees = fees.data.slice(0, 10).map(f => ({
-      id: f.id,
-      amount: f.amount / 100,
-      created: new Date(f.created * 1000).toISOString(),
-      account: f.account,
-    }));
-
-    res.json({
-      totalAccounts,
-      activeAccounts,
-      totalFeesEarned: totalFees,
-      todayFees,
-      recentFees,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // Webhook zarejestrowany na górze pliku (przed express.json())
 

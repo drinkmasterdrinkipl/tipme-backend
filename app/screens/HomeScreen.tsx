@@ -29,7 +29,9 @@ export default function HomeScreen({ navigation }: any) {
       const data = await res.json();
       setTodayTotal(data.today?.total ?? 0);
       setTodayCount(data.today?.count ?? 0);
-    } catch {}
+    } catch {
+      // Sieć niedostępna — zostaw 0, użytkownik zobaczy dane przy odświeżeniu
+    }
   };
 
   const selectPreset = (val: number) => { setSelectedPreset(val); setCustomAmount(''); };

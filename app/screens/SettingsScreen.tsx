@@ -13,7 +13,6 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { C } from '../theme';
 import { useAppContext } from '../AppContext';
-import { ADMIN_EMAIL } from '../adminConfig';
 
 export default function SettingsScreen({ navigation }: any) {
   const { onLogout } = useAppContext();
@@ -73,6 +72,7 @@ export default function SettingsScreen({ navigation }: any) {
             await AsyncStorage.multiRemove([
               'stripeAccountId', 'userEmail', 'stripeLocationId',
               'tapToPayEnabled', 'tapToPayWelcomeShown', 'tapToPayEducationShown',
+              'authToken',
             ]);
             onLogout();
           },
@@ -176,25 +176,6 @@ export default function SettingsScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Panel Admina — tylko dla właściciela platformy */}
-        {email.toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
-          <>
-            <Text style={s.sectionLabel}>ADMINISTRACJA</Text>
-            <View style={s.section}>
-              <TouchableOpacity
-                style={s.row}
-                onPress={() => navigation.navigate('Admin')}
-                activeOpacity={0.7}
-              >
-                <View style={s.rowLeft}>
-                  <Text style={s.rowLabel}>Panel Admina</Text>
-                  <Text style={s.rowDesc}>Statystyki platformy, prowizje, konta</Text>
-                </View>
-                <Text style={s.rowArrow}>→</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
 
         {/* Wyloguj */}
         <Text style={s.sectionLabel}>KONTO</Text>

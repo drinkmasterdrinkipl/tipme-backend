@@ -20,6 +20,7 @@ export default function SuccessScreen({ navigation, route }: any) {
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState('');
   const mountedRef = useRef(true);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -34,12 +35,13 @@ export default function SuccessScreen({ navigation, route }: any) {
   const sendReceipt = async () => {
     if (!email.includes('@')) return;
     setSending(true);
+    setSendError('');
     try {
       const res = await apiFetch(`${API_URL}/api/send-receipt`, {
         method: 'POST',
         body: JSON.stringify({ email, amount, last4, paymentMethod, date }),
       });
-      if (!res.ok) throw new Error('Błąd serwera');
+      if (!res.ok) throw new Error('Błąd serwera — spróbuj ponownie');
       if (!mountedRef.current) return;
       setSent(true);
       timeoutRef.current = setTimeout(() => {
@@ -47,9 +49,10 @@ export default function SuccessScreen({ navigation, route }: any) {
         setModalVisible(false);
         setSent(false);
         setEmail('');
+        setSendError('');
       }, 1500);
     } catch (e: any) {
-      if (mountedRef.current) setSending(false);
+      if (mountedRef.current) setSendError(e.message || 'Nie udało się wysłać');
     } finally {
       if (mountedRef.current) setSending(false);
     }
@@ -119,6 +122,7 @@ export default function SuccessScreen({ navigation, route }: any) {
                   onChangeText={setEmail}
                   autoFocus
                 />
+                {sendError ? <Text style={s.sendErrorText}>{sendError}</Text> : null}
                 <TouchableOpacity
                   style={[s.sendBtn, (!email.includes('@') || sending) && s.sendBtnDisabled]}
                   onPress={sendReceipt}
@@ -208,6 +212,7 @@ const s = StyleSheet.create({
   sendBtnText: { color: C.white, fontSize: 16, fontWeight: '800' },
   cancelBtn: { alignItems: 'center', paddingVertical: 12 },
   cancelBtnText: { color: C.text3, fontSize: 14, fontWeight: '600' },
+  sendErrorText: { fontSize: 12, color: C.error ?? '#f87171', textAlign: 'center', marginBottom: 8 },
   sentWrap: { alignItems: 'center', paddingVertical: 24 },
   sentCheck: { fontSize: 48, color: C.success, marginBottom: 8 },
   sentText: { fontSize: 22, fontWeight: '900', color: C.success },
