@@ -273,8 +273,7 @@ const s = StyleSheet.create({
   nfcZone: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 10,
+    justifyContent: 'center',
     overflow: 'hidden',
   },
   particle: {
