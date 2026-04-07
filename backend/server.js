@@ -214,7 +214,6 @@ app.post('/api/auth/login', async (req, res) => {
       allMatches.find(a => a.charges_enabled) ||
       allMatches.find(a => a.metadata?.password_hash) ||
       allMatches[0];
-    console.log('🔑 login match:', match?.id, 'charges_enabled:', match?.charges_enabled, 'has_hash:', !!match?.metadata?.password_hash);
 
     // Weryfikuj hasło
     const hash = match.metadata?.password_hash;
@@ -749,17 +748,6 @@ app.post('/api/payout/:accountId', async (req, res) => {
 // Health check — używany przez UptimeRobot żeby serwer nie zasypiał
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-// Tymczasowy endpoint diagnostyczny — usuń po debugowaniu
-app.get('/api/debug/accounts', async (req, res) => {
-  const accounts = await stripe.accounts.list({ limit: 100 });
-  res.json(accounts.data.map(a => ({
-    id: a.id,
-    email: a.email,
-    charges_enabled: a.charges_enabled,
-    details_submitted: a.details_submitted,
-    has_hash: !!a.metadata?.password_hash,
-  })));
-});
 
 // ============================================
 // START SERWERA
