@@ -200,15 +200,14 @@ export default function TapScreen({ navigation, route }: any) {
           }]} />
         ))}
 
-        {/* Zewnętrzny pierścień pulsujący */}
-        <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
-
-        {/* Wewnętrzny okrąg */}
-        <View style={s.ringInner}>
-          {/* Ikona NFC — symbol zbliżeniowy */}
-          <Text style={s.nfcWaves}>)</Text>
-          <Text style={[s.nfcWaves, s.nfcWaves2]}>)</Text>
-          <Text style={[s.nfcWaves, s.nfcWaves3]}>)</Text>
+        {/* Kontener kółek — wyśrodkowany */}
+        <View style={s.ringContainer}>
+          <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
+          <View style={s.ringInner}>
+            <Text style={s.nfcWaves}>)</Text>
+            <Text style={[s.nfcWaves, s.nfcWaves2]}>)</Text>
+            <Text style={[s.nfcWaves, s.nfcWaves3]}>)</Text>
+          </View>
         </View>
 
         {/* Napis */}
@@ -282,12 +281,16 @@ const s = StyleSheet.create({
     position: 'absolute',
     backgroundColor: '#5b7cff',
   },
+  ringContainer: {
+    width: 220, height: 220,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 24,
+  },
   ringOuter: {
     position: 'absolute',
     width: 220, height: 220, borderRadius: 110,
     borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
     backgroundColor: 'rgba(168,85,247,0.05)',
-    alignSelf: 'center',
   },
   ringInner: {
     width: 130, height: 130, borderRadius: 65,
@@ -295,8 +298,6 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: '#7c3aed',
     alignItems: 'center', justifyContent: 'center',
     flexDirection: 'row',
-    marginBottom: 24,
-    alignSelf: 'center',
   },
   nfcWaves: {
     fontSize: 48, color: '#fff',
