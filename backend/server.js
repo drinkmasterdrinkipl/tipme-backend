@@ -272,13 +272,33 @@ app.post('/api/auth/set-password', async (req, res) => {
 // ============================================
 app.get('/api/account-status/:accountId', async (req, res) => {
   try {
-    const account = await stripe.accounts.retrieve(req.params.accountId);
+    const { accountId } = req.params;
+    const account = await stripe.accounts.retrieve(accountId, {
+      expand: ['capabilities'],
+    });
+
+    // Jeśli capabilities są paused — spróbuj je ponownie aktywować
+    const caps = account.capabilities || {};
+    const needsReactivation =
+      caps.card_payments === 'inactive' || caps.card_payments === 'paused' ||
+      caps.transfers === 'inactive' || caps.transfers === 'paused';
+
+    if (needsReactivation) {
+      await stripe.accounts.update(account.id, {
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+        },
+      });
+    }
+
     const token = account.charges_enabled ? createToken(account.id, account.email) : null;
 
     res.json({
       chargesEnabled: account.charges_enabled,
       payoutsEnabled: account.payouts_enabled,
       detailsSubmitted: account.details_submitted,
+      capabilitiesStatus: caps.card_payments,
       token,
     });
   } catch (error) {
