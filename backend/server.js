@@ -152,6 +152,10 @@ app.post('/api/create-connected-account', async (req, res) => {
       email: email.toLowerCase().trim(),
       country: 'PL',
       business_type: 'individual',
+      business_profile: {
+        name: 'Tip For Me',
+        url: 'https://tipme.drinki.pl',
+      },
       capabilities: {
         card_payments: { requested: true },
         transfers: { requested: true },
@@ -245,6 +249,23 @@ app.post('/api/auth/login', async (req, res) => {
 
 // ============================================
 // CLEANUP — Usuń wszystkie Restricted (nieaktywne) konta
+// Aktualizacja business_profile dla istniejącego konta
+// ============================================
+app.post('/api/update-business-profile/:accountId', async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    await stripe.accounts.update(accountId, {
+      business_profile: {
+        name: 'Tip For Me',
+        url: 'https://tipme.drinki.pl',
+      },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Jednorazowy endpoint — wywołaj raz, potem możesz go usunąć
 // ============================================
 app.delete('/api/cleanup-restricted-accounts', async (req, res) => {
