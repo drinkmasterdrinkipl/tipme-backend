@@ -287,6 +287,7 @@ const s = StyleSheet.create({
     width: 220, height: 220, borderRadius: 110,
     borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
     backgroundColor: 'rgba(168,85,247,0.05)',
+    alignSelf: 'center',
   },
   ringInner: {
     width: 130, height: 130, borderRadius: 65,
