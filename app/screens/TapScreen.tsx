@@ -317,11 +317,11 @@ const s = StyleSheet.create({
 
   // Karta dolna
   card: {
-    margin: 16, marginTop: 0, marginBottom: 32,
-    borderRadius: 24,
+    marginHorizontal: 16, marginBottom: 40,
+    borderRadius: 28,
     backgroundColor: '#13112a',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    padding: 20,
+    padding: 28,
     alignSelf: 'center',
     width: '92%',
   },
@@ -329,14 +329,14 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 14,
   },
   cardIcon: {
-    width: 52, height: 52, borderRadius: 14,
+    width: 64, height: 64, borderRadius: 18,
     backgroundColor: '#2d1f5e',
     alignItems: 'center', justifyContent: 'center',
   },
-  cardIconEmoji: { fontSize: 26 },
-  cardName: { fontSize: 13, color: 'rgba(255,255,255,0.45)', fontWeight: '600', marginBottom: 2 },
-  cardAmount: { fontSize: 42, fontWeight: '900', color: '#ffffff', letterSpacing: -1 },
-  cardCurr: { fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.5)' },
+  cardIconEmoji: { fontSize: 32 },
+  cardName: { fontSize: 14, color: 'rgba(255,255,255,0.45)', fontWeight: '600', marginBottom: 4 },
+  cardAmount: { fontSize: 52, fontWeight: '900', color: '#ffffff', letterSpacing: -1 },
+  cardCurr: { fontSize: 24, fontWeight: '700', color: 'rgba(255,255,255,0.5)' },
   progressBar: {
     width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 2, overflow: 'hidden', marginTop: 16,
