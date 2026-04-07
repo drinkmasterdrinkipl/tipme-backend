@@ -203,11 +203,7 @@ export default function TapScreen({ navigation, route }: any) {
         {/* Kontener kółek — wyśrodkowany */}
         <View style={s.ringContainer}>
           <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
-          <View style={s.ringInner}>
-            <Text style={s.nfcWaves}>)</Text>
-            <Text style={[s.nfcWaves, s.nfcWaves2]}>)</Text>
-            <Text style={[s.nfcWaves, s.nfcWaves3]}>)</Text>
-          </View>
+          <View style={s.ringInner} />
         </View>
 
         {/* Napis */}
