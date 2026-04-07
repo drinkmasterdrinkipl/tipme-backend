@@ -10,6 +10,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
+// Statyczne cząsteczki w tle
+const PARTICLES = [
+  { top: 8, left: 30, size: 2, op: 0.6 },
+  { top: 20, left: 80, size: 1.5, op: 0.4 },
+  { top: 15, left: 140, size: 2.5, op: 0.7 },
+  { top: 35, left: 200, size: 1.5, op: 0.5 },
+  { top: 10, left: 260, size: 2, op: 0.6 },
+  { top: 50, left: 50, size: 1.5, op: 0.3 },
+  { top: 60, left: 110, size: 2, op: 0.5 },
+  { top: 45, left: 170, size: 1, op: 0.4 },
+  { top: 70, left: 230, size: 2.5, op: 0.6 },
+  { top: 80, left: 20, size: 2, op: 0.5 },
+  { top: 90, left: 90, size: 1.5, op: 0.3 },
+  { top: 100, left: 150, size: 2, op: 0.7 },
+  { top: 75, left: 290, size: 1.5, op: 0.4 },
+  { top: 120, left: 60, size: 2, op: 0.5 },
+  { top: 110, left: 200, size: 1, op: 0.6 },
+  { top: 130, left: 330, size: 2, op: 0.3 },
+  { top: 25, left: 310, size: 1.5, op: 0.5 },
+  { top: 55, left: 350, size: 2, op: 0.4 },
+  { top: 95, left: 120, size: 1, op: 0.6 },
+  { top: 140, left: 250, size: 1.5, op: 0.4 },
+];
+
 export default function TapScreen({ navigation, route }: any) {
   const amount: number = route.params?.amount ?? 0;
   if (!amount || amount <= 0) {
@@ -28,18 +52,18 @@ export default function TapScreen({ navigation, route }: any) {
 
   // Animacja pulsu NFC
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const opacityAnim = useRef(new Animated.Value(0.6)).current;
+  const opacityAnim = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.parallel([
-          Animated.timing(pulseAnim, { toValue: 1.18, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(opacityAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.22, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(opacityAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
         ]),
         Animated.parallel([
-          Animated.timing(pulseAnim, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(opacityAnim, { toValue: 0.6, duration: 900, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(opacityAnim, { toValue: 0.5, duration: 1000, useNativeDriver: true }),
         ]),
       ])
     );
@@ -48,16 +72,10 @@ export default function TapScreen({ navigation, route }: any) {
   }, []);
 
   const {
-    discoverReaders,
-    connectReader,
-    disconnectReader,
-    collectPaymentMethod,
-    confirmPaymentIntent,
-    retrievePaymentIntent,
+    discoverReaders, connectReader, disconnectReader,
+    collectPaymentMethod, confirmPaymentIntent, retrievePaymentIntent,
   } = useStripeTerminal({
-    onUpdateDiscoveredReaders: (readers) => {
-      discoveredRef.current = readers;
-    },
+    onUpdateDiscoveredReaders: (readers) => { discoveredRef.current = readers; },
   });
 
   useEffect(() => {
@@ -65,11 +83,8 @@ export default function TapScreen({ navigation, route }: any) {
     return () => { disconnectReader().catch(() => {}); };
   }, []);
 
-  // Auto-start płatności gdy czytnik gotowy
   useEffect(() => {
-    if (status === 'ready') {
-      processPayment();
-    }
+    if (status === 'ready') processPayment();
   }, [status]);
 
   const initializeReader = async () => {
@@ -80,10 +95,7 @@ export default function TapScreen({ navigation, route }: any) {
 
       setInitStep('Szukanie czytnika...');
       setInitProgress(35);
-      const { error: discoverError } = await discoverReaders({
-        discoveryMethod: 'tapToPay',
-        simulated: false,
-      });
+      const { error: discoverError } = await discoverReaders({ discoveryMethod: 'tapToPay', simulated: false });
       if (discoverError) throw new Error(discoverError.message);
 
       setInitStep('Wykrywanie urządzenia...');
@@ -91,27 +103,21 @@ export default function TapScreen({ navigation, route }: any) {
 
       let waited = 0;
       while (discoveredRef.current.length === 0 && waited < 15000) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(r => setTimeout(r, 300));
         waited += 300;
       }
 
       const readers = discoveredRef.current;
-      if (!readers || readers.length === 0) throw new Error('Nie znaleziono czytnika NFC. Upewnij się że NFC jest włączone.');
+      if (!readers || readers.length === 0) throw new Error('Nie znaleziono czytnika NFC.');
 
-      setInitStep('Łączenie z czytnikiem...');
+      setInitStep('Łączenie...');
       setInitProgress(80);
       const locationId = await AsyncStorage.getItem('stripeLocationId') ?? '';
-      const { error: connectError } = await connectReader({
-        discoveryMethod: 'tapToPay',
-        reader: readers[0],
-        locationId,
-      });
+      const { error: connectError } = await connectReader({ discoveryMethod: 'tapToPay', reader: readers[0], locationId });
       if (connectError) throw new Error(connectError.message);
 
-      setInitStep('Gotowy!');
       setInitProgress(100);
-      await new Promise(resolve => setTimeout(resolve, 300));
-
+      await new Promise(r => setTimeout(r, 300));
       setStatus('ready');
     } catch (error: any) {
       setStatus('error');
@@ -125,8 +131,7 @@ export default function TapScreen({ navigation, route }: any) {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
 
-      const idempotencyKey = `tip-${Date.now()}-${Math.random().toString(36).slice(2, 11)}-${Math.random().toString(36).slice(2, 11)}`;
-
+      const idempotencyKey = `tip-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
       const controller = new AbortController();
       const fetchTimeout = setTimeout(() => controller.abort(), 10000);
 
@@ -145,25 +150,20 @@ export default function TapScreen({ navigation, route }: any) {
         clientSecret = data.clientSecret;
       } catch (error: any) {
         clearTimeout(fetchTimeout);
-        if (error.name === 'AbortError') throw new Error('Przekroczono czas oczekiwania na serwer');
+        if (error.name === 'AbortError') throw new Error('Przekroczono czas oczekiwania');
         throw error;
       }
 
       const { paymentIntent: retrievedPI, error: retrieveError } = await retrievePaymentIntent(clientSecret!);
       if (retrieveError) throw new Error(retrieveError.message);
 
-      // Tu iOS pokazuje natywny ekran "Zbliż tutaj, aby zapłacić"
-      const { paymentIntent: collectedPI, error: collectError } = await collectPaymentMethod({
-        paymentIntent: retrievedPI!,
-      });
+      const { paymentIntent: collectedPI, error: collectError } = await collectPaymentMethod({ paymentIntent: retrievedPI! });
       if (collectError) {
         if (collectError.code === ErrorCode.CANCELED) { setStatus('ready'); return; }
         throw new Error(collectError.message);
       }
 
-      const { paymentIntent: confirmedPI, error: confirmError } = await confirmPaymentIntent({
-        paymentIntent: collectedPI!,
-      });
+      const { paymentIntent: confirmedPI, error: confirmError } = await confirmPaymentIntent({ paymentIntent: collectedPI! });
       if (confirmError) throw new Error(confirmError.message);
 
       const charge = confirmedPI?.charges?.[0];
@@ -182,43 +182,55 @@ export default function TapScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
+
       {/* Przycisk powrotu */}
       <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
         <Text style={s.backIcon}>←</Text>
       </TouchableOpacity>
 
-      {/* Górna strefa NFC */}
+      {/* Górna strefa — ciemna z cząsteczkami */}
       <View style={s.nfcZone}>
-        {/* Zewnętrzny puls */}
-        <Animated.View style={[s.nfcPulseOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
-        {/* Środkowy puls */}
-        <Animated.View style={[s.nfcPulseInner, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
-        {/* Ikona NFC */}
-        <View style={s.nfcIconWrap}>
-          <Text style={s.nfcIcon}>))</Text>
-          <Text style={[s.nfcIcon, { fontSize: 28, marginTop: -8 }]}>))</Text>
+        {/* Cząsteczki w tle */}
+        {PARTICLES.map((p, i) => (
+          <View key={i} style={[s.particle, {
+            top: p.top, left: p.left,
+            width: p.size, height: p.size,
+            borderRadius: p.size / 2,
+            opacity: p.op,
+          }]} />
+        ))}
+
+        {/* Zewnętrzny pierścień pulsujący */}
+        <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
+
+        {/* Wewnętrzny okrąg */}
+        <View style={s.ringInner}>
+          {/* Ikona NFC — symbol zbliżeniowy */}
+          <Text style={s.nfcWaves}>)</Text>
+          <Text style={[s.nfcWaves, s.nfcWaves2]}>)</Text>
+          <Text style={[s.nfcWaves, s.nfcWaves3]}>)</Text>
         </View>
 
-        {/* Napis zawsze widoczny */}
-        <Text style={s.nfcHint}>Zbliż tutaj, aby zapłacić</Text>
+        {/* Napis */}
+        <Text style={s.hint}>Zbliż tutaj, aby zapłacić</Text>
 
         {status === 'connecting' && (
-          <View style={s.connectingRow}>
-            <ActivityIndicator size="small" color={C.text3} />
-            <Text style={s.connectingText}>{initStep}</Text>
+          <View style={s.connectRow}>
+            <ActivityIndicator size="small" color={'rgba(255,255,255,0.4)'} />
+            <Text style={s.connectText}>{initStep}</Text>
           </View>
         )}
       </View>
 
-      {/* Karta z kwotą na dole */}
+      {/* Karta dolna */}
       <View style={s.card}>
-        <View style={s.cardInner}>
+        <View style={s.cardTop}>
           <View style={s.cardIcon}>
-            <Text style={s.cardIconText}>💜</Text>
+            <Text style={s.cardIconEmoji}>💜</Text>
           </View>
           <View>
             <Text style={s.cardName}>Tip For Me</Text>
-            <Text style={s.amount}>{amountZl}<Text style={s.amountCurr}> zł</Text></Text>
+            <Text style={s.cardAmount}>{amountZl}<Text style={s.cardCurr}> zł</Text></Text>
           </View>
         </View>
 
@@ -233,102 +245,110 @@ export default function TapScreen({ navigation, route }: any) {
         )}
 
         {status === 'error' && (
-          <View style={s.errorWrap}>
+          <>
             <Text style={s.errorText}>{errorMsg}</Text>
             <TouchableOpacity style={s.retryBtn} onPress={initializeReader}>
               <Text style={s.retryText}>Spróbuj ponownie</Text>
             </TouchableOpacity>
-          </View>
+          </>
         )}
       </View>
+
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0c0a13' },
+  root: { flex: 1, backgroundColor: '#080810' },
 
   back: {
-    position: 'absolute', top: 60, left: 20, zIndex: 10,
-    width: 40, height: 40, borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    position: 'absolute', top: 60, left: 16, zIndex: 10,
+    width: 42, height: 42, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center', justifyContent: 'center',
   },
-  backIcon: { color: C.text3, fontSize: 18 },
+  backIcon: { color: 'rgba(255,255,255,0.7)', fontSize: 18 },
 
-  // Górna strefa NFC
+  // Górna strefa
   nfcZone: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  nfcPulseOuter: {
+  particle: {
     position: 'absolute',
-    width: 220, height: 220, borderRadius: 110,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.15)',
-    backgroundColor: 'rgba(168,85,247,0.04)',
+    backgroundColor: '#5b7cff',
   },
-  nfcPulseInner: {
+  ringOuter: {
     position: 'absolute',
-    width: 160, height: 160, borderRadius: 80,
-    borderWidth: 1.5, borderColor: 'rgba(168,85,247,0.25)',
-    backgroundColor: 'rgba(168,85,247,0.08)',
+    width: 200, height: 200, borderRadius: 100,
+    borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
+    backgroundColor: 'rgba(168,85,247,0.05)',
   },
-  nfcIconWrap: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: 'rgba(168,85,247,0.18)',
-    borderWidth: 2, borderColor: 'rgba(168,85,247,0.5)',
+  ringInner: {
+    width: 120, height: 120, borderRadius: 60,
+    backgroundColor: '#2d1f5e',
+    borderWidth: 2, borderColor: '#7c3aed',
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 28,
+    flexDirection: 'row',
+    marginBottom: 24,
   },
-  nfcIcon: {
-    fontSize: 38, color: '#fff',
-    fontWeight: '900', letterSpacing: -6,
+  nfcWaves: {
+    fontSize: 48, color: '#fff',
+    fontWeight: '900', lineHeight: 56,
+    marginHorizontal: -4,
   },
-  nfcHint: {
+  nfcWaves2: { opacity: 0.7, fontSize: 36 },
+  nfcWaves3: { opacity: 0.4, fontSize: 24 },
+  hint: {
     fontSize: 18, fontWeight: '700',
-    color: '#ffffff', letterSpacing: 0.2,
-    marginBottom: 16,
+    color: '#ffffff', marginBottom: 12,
   },
-  connectingRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4,
+  connectRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
   },
-  connectingText: { fontSize: 13, color: C.text3 },
+  connectText: { fontSize: 12, color: 'rgba(255,255,255,0.35)' },
 
-  // Karta dolna — jak na zdjęciu
+  // Karta dolna
   card: {
-    margin: 20, marginTop: 0,
-    borderRadius: 28,
-    backgroundColor: '#1a1730',
+    margin: 16, marginTop: 0,
+    borderRadius: 24,
+    backgroundColor: '#13112a',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    padding: 24,
+    padding: 20,
   },
-  cardInner: {
-    flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 4,
+  cardTop: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
   },
   cardIcon: {
-    width: 52, height: 52, borderRadius: 16,
-    backgroundColor: 'rgba(168,85,247,0.2)',
+    width: 52, height: 52, borderRadius: 14,
+    backgroundColor: '#2d1f5e',
     alignItems: 'center', justifyContent: 'center',
   },
-  cardIconText: { fontSize: 26 },
-  cardName: { fontSize: 13, color: C.text3, fontWeight: '600', marginBottom: 2 },
-  amount: { fontSize: 44, fontWeight: '900', color: '#ffffff', letterSpacing: -2 },
-  amountCurr: { fontSize: 22, fontWeight: '700', color: C.text2 },
+  cardIconEmoji: { fontSize: 26 },
+  cardName: { fontSize: 13, color: 'rgba(255,255,255,0.45)', fontWeight: '600', marginBottom: 2 },
+  cardAmount: { fontSize: 42, fontWeight: '900', color: '#ffffff', letterSpacing: -1 },
+  cardCurr: { fontSize: 20, fontWeight: '700', color: 'rgba(255,255,255,0.5)' },
   progressBar: {
     width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 2, overflow: 'hidden', marginTop: 16,
   },
-  progressFill: { height: '100%', backgroundColor: C.primary, borderRadius: 2 },
+  progressFill: { height: '100%', backgroundColor: '#7c3aed', borderRadius: 2 },
   processingText: {
-    fontSize: 13, color: C.text3, textAlign: 'center', marginTop: 14,
+    fontSize: 13, color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center', marginTop: 14,
   },
-  errorWrap: { alignItems: 'center', marginTop: 14 },
-  errorText: { fontSize: 13, color: C.error, textAlign: 'center', marginBottom: 14 },
+  errorText: {
+    fontSize: 13, color: '#f87171',
+    textAlign: 'center', marginTop: 14, marginBottom: 12,
+  },
   retryBtn: {
-    paddingVertical: 12, paddingHorizontal: 28, borderRadius: 14,
-    borderWidth: 1.5, borderColor: C.cardBorder,
+    paddingVertical: 14, borderRadius: 14,
+    backgroundColor: 'rgba(124,58,237,0.2)',
+    borderWidth: 1, borderColor: 'rgba(124,58,237,0.4)',
+    alignItems: 'center', marginTop: 4,
   },
-  retryText: { color: C.primaryLight, fontSize: 14, fontWeight: '700' },
+  retryText: { color: '#a78bfa', fontSize: 15, fontWeight: '700' },
 });
