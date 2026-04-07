@@ -200,14 +200,15 @@ export default function TapScreen({ navigation, route }: any) {
           }]} />
         ))}
 
+        {/* Napis NAD kółkiem */}
+        <Text style={s.hint}>Zbliż tutaj, aby zapłacić</Text>
+
         {/* Kontener kółek — wyśrodkowany */}
         <View style={s.ringContainer}>
           <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
           <View style={s.ringInner} />
         </View>
 
-        {/* Napis */}
-        <Text style={s.hint}>Zbliż tutaj, aby zapłacić</Text>
 
         {status === 'connecting' && (
           <View style={s.connectRow}>
@@ -305,7 +306,7 @@ const s = StyleSheet.create({
   nfcWaves3: { opacity: 0.4, fontSize: 24 },
   hint: {
     fontSize: 18, fontWeight: '700',
-    color: '#ffffff', marginBottom: 12,
+    color: '#ffffff', marginBottom: 16, marginTop: 0,
   },
   connectRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
