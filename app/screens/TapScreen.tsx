@@ -275,7 +275,7 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 60,
+    paddingTop: 20,
     overflow: 'hidden',
   },
   particle: {
@@ -295,6 +295,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     flexDirection: 'row',
     marginBottom: 24,
+    alignSelf: 'center',
   },
   nfcWaves: {
     fontSize: 48, color: '#fff',
