@@ -28,6 +28,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   const [loading, setLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [pollCount, setPollCount] = useState(0);
+  const [statusMsg, setStatusMsg] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const MAX_POLLS = 240; // 240 × 30s = 2 godziny
 
@@ -230,14 +231,11 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         await ensureLocationId(accountId);
         if (onComplete) onComplete();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      } else if (!silent) {
-        Alert.alert(
-          'Jeszcze nie gotowe',
-          'Stripe weryfikuje Twoje dane. Sprawdzimy automatycznie co 30 sekund — dostaniesz też email gdy konto będzie gotowe.'
-        );
+      } else {
+        setStatusMsg('Konto jeszcze niezweryfikowane. Stripe może potrzebować do 24h.');
       }
     } catch (error) {
-      if (!silent) Alert.alert('Błąd', 'Nie udało się sprawdzić statusu konta');
+      if (!silent) setStatusMsg('Błąd połączenia — sprawdź internet i spróbuj ponownie.');
     } finally {
       if (!silent) setLoading(false);
     }
@@ -506,15 +504,19 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             Sprawdzamy automatycznie co 30 sekund.{'\n'}
             Dostaniesz też email gdy konto będzie gotowe.
           </Text>
-          {pollCount > 0 && (
+          {statusMsg ? (
+            <Text style={{ color: '#f87171', fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
+              {statusMsg}
+            </Text>
+          ) : pollCount > 0 ? (
             <Text style={{ color: '#555', fontSize: 12, marginBottom: 16 }}>
               Sprawdzono: {pollCount}x — weryfikacja w toku...
             </Text>
-          )}
+          ) : null}
 
           <TouchableOpacity
             style={[styles.primaryBtn, loading && styles.btnDisabled]}
-            onPress={checkStripeStatus}
+            onPress={() => { setStatusMsg(''); checkStripeStatus(); }}
             disabled={loading}
           >
             {loading ? (
