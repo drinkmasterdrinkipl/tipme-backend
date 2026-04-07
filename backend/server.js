@@ -250,8 +250,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.delete('/api/cleanup-restricted-accounts', async (req, res) => {
   try {
     const accounts = await stripe.accounts.list({ limit: 100 });
-    const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60;
-    const restricted = accounts.data.filter(a => !a.charges_enabled && a.created < sevenDaysAgo);
+    const restricted = accounts.data.filter(a => !a.charges_enabled);
     const deleted = [];
     const errors = [];
     for (const acc of restricted) {
