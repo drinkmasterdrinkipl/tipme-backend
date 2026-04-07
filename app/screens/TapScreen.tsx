@@ -274,7 +274,7 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 10,
+    paddingTop: 0,
     overflow: 'hidden',
   },
   particle: {
