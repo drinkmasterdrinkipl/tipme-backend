@@ -1,6 +1,6 @@
 // ============================================
 // TapToPayEducationScreen.tsx
-// Wymaganie Apple: 4.1, 4.2, 4.5, 4.6
+// Wymaganie Apple: 4.1, 4.2, 4.5, 4.6, 4.7
 // Edukacja merchanta — jak używać Tap to Pay
 // ============================================
 
@@ -38,6 +38,12 @@ const SLIDES = [
     title: 'Potwierdzenie płatności',
     desc: 'Po udanej płatności zobaczysz ekran sukcesu z kwotą i metodą płatności. Możesz wysłać potwierdzenie na email klienta.',
     tip: 'Środki trafiają na Twoje konto Stripe i są wypłacane następnego dnia roboczego.',
+  },
+  {
+    icon: '🔢',
+    title: 'Wprowadzanie PIN',
+    desc: 'Przy niektórych transakcjach klient zostanie poproszony o wprowadzenie PIN-u bezpośrednio na ekranie Twojego iPhone\'a. Jest to bezpieczne i szyfrowane przez Apple.',
+    tip: 'Nie dotykaj ekranu podczas gdy klient wpisuje PIN — zapewnia to prywatność klienta.',
   },
   {
     icon: '⚙️',

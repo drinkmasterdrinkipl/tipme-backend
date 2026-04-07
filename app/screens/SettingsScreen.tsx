@@ -178,7 +178,7 @@ export default function SettingsScreen({ navigation }: any) {
 
 
         {/* Wyloguj */}
-        <Text style={s.sectionLabel}>KONTO</Text>
+        <Text style={s.sectionLabel}>WYLOGUJ SIĘ</Text>
         <View style={s.section}>
           <TouchableOpacity style={s.logoutRow} onPress={handleLogout} activeOpacity={0.7}>
             <Text style={s.logoutText}>Wyloguj się</Text>

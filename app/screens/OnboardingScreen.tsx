@@ -231,6 +231,11 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         await ensureLocationId(accountId);
         if (onComplete) onComplete();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } else if (!data.detailsSubmitted) {
+        // Zapisane ID wskazuje na złe konto — wyczyść i wróć do logowania
+        await AsyncStorage.multiRemove(['stripeAccountId', 'authToken', 'stripeLocationId']);
+        setStatusMsg('');
+        setStep('login');
       } else {
         setStatusMsg('Konto jeszcze niezweryfikowane. Stripe może potrzebować do 24h.');
       }

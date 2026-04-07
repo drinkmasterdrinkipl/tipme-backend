@@ -90,6 +90,9 @@ export default function HomeScreen({ navigation }: any) {
                 style={[s.presetBtn, selectedPreset === val && s.presetBtnActive]}
                 onPress={() => selectPreset(val)}
                 activeOpacity={0.7}
+                accessibilityLabel={`Napiwek ${val} złotych`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedPreset === val }}
               >
                 <Text style={[s.presetVal, selectedPreset === val && s.presetValActive]}>{val}</Text>
                 <Text style={[s.presetCurr, selectedPreset === val && s.presetCurrActive]}>zł</Text>
@@ -122,6 +125,9 @@ export default function HomeScreen({ navigation }: any) {
               onPress={startPayment}
               disabled={finalAmount <= 0}
               activeOpacity={0.85}
+              accessibilityLabel={finalAmount > 0 ? `Pobierz napiwek ${finalAmount} złotych` : 'Wybierz kwotę napiwku'}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: finalAmount <= 0 }}
             >
               <Text style={[s.ctaText, finalAmount > 0 && s.ctaTextActive]}>
                 {finalAmount > 0

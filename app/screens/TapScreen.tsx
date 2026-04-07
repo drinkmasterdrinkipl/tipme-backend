@@ -161,7 +161,7 @@ export default function TapScreen({ navigation, route }: any) {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
 
-      const idempotencyKey = `tip-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      const idempotencyKey = `tip-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
       const controller = new AbortController();
       const fetchTimeout = setTimeout(() => controller.abort(), 10000);
 
