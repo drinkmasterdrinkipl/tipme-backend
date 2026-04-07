@@ -273,7 +273,8 @@ const s = StyleSheet.create({
   nfcZone: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 40,
     overflow: 'hidden',
   },
   particle: {
@@ -316,11 +317,13 @@ const s = StyleSheet.create({
 
   // Karta dolna
   card: {
-    margin: 16, marginTop: 0,
+    margin: 16, marginTop: 0, marginBottom: 32,
     borderRadius: 24,
     backgroundColor: '#13112a',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
     padding: 20,
+    alignSelf: 'center',
+    width: '92%',
   },
   cardTop: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
