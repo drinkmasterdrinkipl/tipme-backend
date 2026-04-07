@@ -275,7 +275,7 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 20,
+    paddingTop: 10,
     overflow: 'hidden',
   },
   particle: {
@@ -284,13 +284,14 @@ const s = StyleSheet.create({
   },
   ringOuter: {
     position: 'absolute',
-    width: 220, height: 160, borderRadius: 28,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
-    backgroundColor: 'rgba(168,85,247,0.05)',
+    top: 0, left: 0, right: 0,
+    height: 280, borderRadius: 0,
+    borderWidth: 0,
+    backgroundColor: 'rgba(168,85,247,0.07)',
   },
   ringInner: {
-    width: 140, height: 100, borderRadius: 20,
-    backgroundColor: '#2d1f5e',
+    width: '92%', height: 200, borderRadius: 24,
+    backgroundColor: '#1a1040',
     borderWidth: 2, borderColor: '#7c3aed',
     alignItems: 'center', justifyContent: 'center',
     flexDirection: 'row',
