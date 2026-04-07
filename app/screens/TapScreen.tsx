@@ -200,9 +200,6 @@ export default function TapScreen({ navigation, route }: any) {
           }]} />
         ))}
 
-        {/* Napis NAD kółkiem */}
-        <Text style={s.hint}>Zbliż tutaj, aby zapłacić</Text>
-
         {/* Kontener kółek — wyśrodkowany */}
         <View style={s.ringContainer}>
           <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
@@ -214,6 +211,9 @@ export default function TapScreen({ navigation, route }: any) {
             />
           </View>
         </View>
+
+        {/* Napis POD kółkiem */}
+        <Text style={s.hint}>Zbliż tutaj, aby zapłacić</Text>
 
 
         {status === 'connecting' && (
