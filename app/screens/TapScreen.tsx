@@ -2,7 +2,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Animated, Easing,
+  ActivityIndicator, Animated, Easing, Image,
 } from 'react-native';
 import { useStripeTerminal, ErrorCode } from '@stripe/stripe-terminal-react-native';
 import type { Reader } from '@stripe/stripe-terminal-react-native';
@@ -206,7 +206,13 @@ export default function TapScreen({ navigation, route }: any) {
         {/* Kontener kółek — wyśrodkowany */}
         <View style={s.ringContainer}>
           <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
-          <View style={s.ringInner} />
+          <View style={s.ringInner}>
+            <Image
+              source={require('../assets/contactless.webp')}
+              style={s.contactlessIcon}
+              resizeMode="contain"
+            />
+          </View>
         </View>
 
 
@@ -295,7 +301,10 @@ const s = StyleSheet.create({
     backgroundColor: '#2d1f5e',
     borderWidth: 2, borderColor: '#7c3aed',
     alignItems: 'center', justifyContent: 'center',
-    flexDirection: 'row',
+  },
+  contactlessIcon: {
+    width: 80, height: 80,
+    tintColor: '#ffffff',
   },
   nfcWaves: {
     fontSize: 48, color: '#fff',
