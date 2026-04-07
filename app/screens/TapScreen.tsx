@@ -181,7 +181,7 @@ export default function TapScreen({ navigation, route }: any) {
   };
 
   return (
-    <SafeAreaView style={s.root} edges={['top', 'bottom']}>
+    <SafeAreaView style={s.root} edges={['bottom']}>
 
       {/* Przycisk powrotu */}
       <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
@@ -274,7 +274,8 @@ const s = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginTop: -120,
+    paddingTop: 0,
+    marginTop: -200,
     overflow: 'hidden',
   },
   particle: {
