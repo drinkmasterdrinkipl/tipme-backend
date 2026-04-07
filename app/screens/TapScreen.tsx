@@ -284,12 +284,12 @@ const s = StyleSheet.create({
   },
   ringOuter: {
     position: 'absolute',
-    width: 200, height: 200, borderRadius: 100,
+    width: 220, height: 160, borderRadius: 28,
     borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
     backgroundColor: 'rgba(168,85,247,0.05)',
   },
   ringInner: {
-    width: 120, height: 120, borderRadius: 60,
+    width: 140, height: 100, borderRadius: 20,
     backgroundColor: '#2d1f5e',
     borderWidth: 2, borderColor: '#7c3aed',
     alignItems: 'center', justifyContent: 'center',
