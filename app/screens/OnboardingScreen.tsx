@@ -117,10 +117,21 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
     }
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000); // 60s na cold start
+      let res: Response;
+      try {
+        res = await apiFetch(`${API_URL}/api/auth/login`, {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+          signal: controller.signal,
+        });
+      } catch (e: any) {
+        if (e.name === 'AbortError') throw new Error('Serwer się budzi — spróbuj ponownie za chwilę');
+        throw new Error('Brak połączenia z internetem');
+      } finally {
+        clearTimeout(timeout);
+      }
       const data = await res.json();
 
       // Konto bez hasła — przekieruj do ustawienia hasła

@@ -694,6 +694,9 @@ app.post('/api/payout/:accountId', async (req, res) => {
 
 // Webhook zarejestrowany na górze pliku (przed express.json())
 
+// Health check — używany przez UptimeRobot żeby serwer nie zasypiał
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
 // ============================================
 // START SERWERA
 // ============================================
