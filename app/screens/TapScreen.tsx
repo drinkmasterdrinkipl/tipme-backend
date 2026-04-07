@@ -181,50 +181,60 @@ export default function TapScreen({ navigation, route }: any) {
   };
 
   return (
-    <SafeAreaView style={s.root}>
-      {/* Górna strefa NFC */}
-      <View style={s.nfcZone}>
-        <Animated.View style={[s.nfcPulse, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
-        <View style={s.nfcIconWrap}>
-          <Text style={s.nfcIcon}>))))</Text>
-        </View>
-        {status === 'processing' && (
-          <Text style={s.nfcHint}>Zbliż tutaj, aby zapłacić</Text>
-        )}
-      </View>
-
+    <SafeAreaView style={s.root} edges={['top', 'bottom']}>
       {/* Przycisk powrotu */}
       <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
         <Text style={s.backIcon}>←</Text>
       </TouchableOpacity>
 
-      {/* Karta z kwotą i statusem */}
-      <View style={s.card}>
-        <Text style={s.amountLabel}>DO ZAPŁATY</Text>
-        <Text style={s.amount}>{amountZl}<Text style={s.amountCurr}> zł</Text></Text>
+      {/* Górna strefa NFC */}
+      <View style={s.nfcZone}>
+        {/* Zewnętrzny puls */}
+        <Animated.View style={[s.nfcPulseOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
+        {/* Środkowy puls */}
+        <Animated.View style={[s.nfcPulseInner, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
+        {/* Ikona NFC */}
+        <View style={s.nfcIconWrap}>
+          <Text style={s.nfcIcon}>))</Text>
+          <Text style={[s.nfcIcon, { fontSize: 28, marginTop: -8 }]}>))</Text>
+        </View>
 
-        <View style={s.divider} />
+        {/* Napis zawsze widoczny */}
+        <Text style={s.nfcHint}>Zbliż tutaj, aby zapłacić</Text>
 
         {status === 'connecting' && (
-          <View style={s.stateWrap}>
-            <ActivityIndicator size="small" color={C.primary} style={{ marginBottom: 10 }} />
-            <Text style={s.stateTitle}>{initStep}</Text>
-            <View style={s.progressBar}>
-              <View style={[s.progressFill, { width: `${initProgress}%` as any }]} />
-            </View>
+          <View style={s.connectingRow}>
+            <ActivityIndicator size="small" color={C.text3} />
+            <Text style={s.connectingText}>{initStep}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Karta z kwotą na dole */}
+      <View style={s.card}>
+        <View style={s.cardInner}>
+          <View style={s.cardIcon}>
+            <Text style={s.cardIconText}>💜</Text>
+          </View>
+          <View>
+            <Text style={s.cardName}>Tip For Me</Text>
+            <Text style={s.amount}>{amountZl}<Text style={s.amountCurr}> zł</Text></Text>
+          </View>
+        </View>
+
+        {status === 'connecting' && (
+          <View style={s.progressBar}>
+            <View style={[s.progressFill, { width: `${initProgress}%` as any }]} />
           </View>
         )}
 
         {status === 'processing' && (
-          <View style={s.stateWrap}>
-            <ActivityIndicator size="small" color={C.primary} style={{ marginBottom: 10 }} />
-            <Text style={s.stateTitle}>Proszę trzymać kartę przy telefonie...</Text>
-          </View>
+          <Text style={s.processingText}>Proszę trzymać kartę przy telefonie...</Text>
         )}
 
         {status === 'error' && (
-          <View style={s.stateWrap}>
-            <Text style={[s.stateTitle, { color: C.error, marginBottom: 12 }]}>{errorMsg}</Text>
+          <View style={s.errorWrap}>
+            <Text style={s.errorText}>{errorMsg}</Text>
             <TouchableOpacity style={s.retryBtn} onPress={initializeReader}>
               <Text style={s.retryText}>Spróbuj ponownie</Text>
             </TouchableOpacity>
@@ -238,92 +248,87 @@ export default function TapScreen({ navigation, route }: any) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0c0a13' },
 
+  back: {
+    position: 'absolute', top: 60, left: 20, zIndex: 10,
+    width: 40, height: 40, borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  backIcon: { color: C.text3, fontSize: 18 },
+
   // Górna strefa NFC
   nfcZone: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
   },
-  nfcPulse: {
+  nfcPulseOuter: {
     position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(168,85,247,0.12)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(168,85,247,0.25)',
+    width: 220, height: 220, borderRadius: 110,
+    borderWidth: 1, borderColor: 'rgba(168,85,247,0.15)',
+    backgroundColor: 'rgba(168,85,247,0.04)',
+  },
+  nfcPulseInner: {
+    position: 'absolute',
+    width: 160, height: 160, borderRadius: 80,
+    borderWidth: 1.5, borderColor: 'rgba(168,85,247,0.25)',
+    backgroundColor: 'rgba(168,85,247,0.08)',
   },
   nfcIconWrap: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: 'rgba(168,85,247,0.15)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(168,85,247,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: 'rgba(168,85,247,0.18)',
+    borderWidth: 2, borderColor: 'rgba(168,85,247,0.5)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 28,
   },
   nfcIcon: {
-    fontSize: 36,
-    color: C.primaryLight,
-    fontWeight: '900',
-    letterSpacing: -4,
+    fontSize: 38, color: '#fff',
+    fontWeight: '900', letterSpacing: -6,
   },
   nfcHint: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: C.text2,
-    letterSpacing: 0.2,
+    fontSize: 18, fontWeight: '700',
+    color: '#ffffff', letterSpacing: 0.2,
+    marginBottom: 16,
   },
+  connectingRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4,
+  },
+  connectingText: { fontSize: 13, color: C.text3 },
 
-  // Przycisk powrotu
-  back: {
-    position: 'absolute', top: 60, left: 20, zIndex: 10,
-    width: 40, height: 40, borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+  // Karta dolna — jak na zdjęciu
+  card: {
+    margin: 20, marginTop: 0,
+    borderRadius: 28,
+    backgroundColor: '#1a1730',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    padding: 24,
+  },
+  cardInner: {
+    flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 4,
+  },
+  cardIcon: {
+    width: 52, height: 52, borderRadius: 16,
+    backgroundColor: 'rgba(168,85,247,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-  backIcon: { color: C.text3, fontSize: 18 },
-
-  // Karta dolna
-  card: {
-    margin: 20,
-    marginTop: 0,
-    borderRadius: 28,
-    backgroundColor: C.card,
-    borderWidth: 1,
-    borderColor: C.cardBorder,
-    padding: 28,
-    alignItems: 'center',
-  },
-  amountLabel: {
-    fontSize: 10, fontWeight: '700', letterSpacing: 2.5,
-    color: C.text3, marginBottom: 8,
-  },
-  amount: {
-    fontSize: 64, fontWeight: '900', color: C.text1, letterSpacing: -3,
-  },
-  amountCurr: { fontSize: 26, fontWeight: '700', color: C.text2 },
-  divider: {
-    width: '100%', height: 1,
-    backgroundColor: C.cardBorder, marginVertical: 20,
-  },
-  stateWrap: { alignItems: 'center', width: '100%' },
-  stateTitle: {
-    fontSize: 14, color: C.text3,
-    textAlign: 'center', lineHeight: 22,
-  },
+  cardIconText: { fontSize: 26 },
+  cardName: { fontSize: 13, color: C.text3, fontWeight: '600', marginBottom: 2 },
+  amount: { fontSize: 44, fontWeight: '900', color: '#ffffff', letterSpacing: -2 },
+  amountCurr: { fontSize: 22, fontWeight: '700', color: C.text2 },
   progressBar: {
-    width: '100%', height: 4, backgroundColor: C.text4,
-    borderRadius: 2, overflow: 'hidden', marginTop: 14,
+    width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 2, overflow: 'hidden', marginTop: 16,
   },
   progressFill: { height: '100%', backgroundColor: C.primary, borderRadius: 2 },
-  retryBtn: {
-    paddingVertical: 14, paddingHorizontal: 32, borderRadius: 16,
-    borderWidth: 1.5, borderColor: C.cardBorder, backgroundColor: C.card,
+  processingText: {
+    fontSize: 13, color: C.text3, textAlign: 'center', marginTop: 14,
   },
-  retryText: { color: C.primaryLight, fontSize: 15, fontWeight: '700' },
+  errorWrap: { alignItems: 'center', marginTop: 14 },
+  errorText: { fontSize: 13, color: C.error, textAlign: 'center', marginBottom: 14 },
+  retryBtn: {
+    paddingVertical: 12, paddingHorizontal: 28, borderRadius: 14,
+    borderWidth: 1.5, borderColor: C.cardBorder,
+  },
+  retryText: { color: C.primaryLight, fontSize: 14, fontWeight: '700' },
 });
