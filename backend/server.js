@@ -378,8 +378,8 @@ app.post('/api/create-location', async (req, res) => {
         address: {
           country: 'PL',
           city: 'Warszawa',
-          line1: 'ul. Marszałkowska 1',
-          postal_code: '00-001',
+          line1: 'Marszalkowska 1',
+          postal_code: '00-624',
         },
       },
       { stripeAccount: stripeAccountId }
