@@ -377,8 +377,8 @@ app.post('/api/create-location', async (req, res) => {
         display_name: safeName,
         address: {
           country: 'PL',
-          city: 'Polska',
-          line1: 'Mobile',
+          city: 'Warszawa',
+          line1: 'ul. Marszałkowska 1',
           postal_code: '00-001',
         },
       },
