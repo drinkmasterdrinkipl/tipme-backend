@@ -554,25 +554,24 @@ app.get('/api/stats/:accountId', async (req, res) => {
       t.amount > 0
     );
 
-    const totalAmount   = successful.reduce((sum, t) => sum + t.amount, 0) / 100;
+    const totalAmount    = successful.reduce((sum, t) => sum + t.amount, 0) / 100;
     const totalStripeFee = successful.reduce((sum, t) => sum + t.fee, 0) / 100;
-    const totalNet      = successful.reduce((sum, t) => sum + t.net, 0) / 100;
-    const count         = successful.length;
-    const average       = count > 0 ? totalAmount / count : 0;
+    const totalNet       = successful.reduce((sum, t) => sum + t.net, 0) / 100;
+    const count          = successful.length;
+    const average        = count > 0 ? totalAmount / count : 0;
 
-    // Prowizja platformy (5%) jest pobierana jako application_fee — już uwzględniona w net
-    // Pokazujemy ją osobno dla przejrzystości
+    // net z Stripe już zawiera potrącenie application_fee (prowizja platformy 5%)
+    // oraz opłaty Stripe Terminal — nie odejmujemy ponownie
     const platformFee = totalAmount * PLATFORM_FEE_PERCENT;
-    const netAfterAll = totalNet - platformFee;
 
     res.json({
       today: {
         total: totalAmount,
         count,
         average,
-        stripeFee: totalStripeFee,       // dokładna opłata Stripe
-        platformFee,                      // 5% prowizja Tip For Me
-        net: Math.max(0, netAfterAll),    // rzeczywisty zarobek
+        stripeFee: totalStripeFee,
+        platformFee,
+        net: Math.max(0, totalNet),   // już po wszystkich potrąceniach
       },
     });
   } catch (error) {
