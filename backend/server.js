@@ -421,8 +421,8 @@ app.post('/api/create-payment-intent', async (req, res) => {
   try {
     const { amount, stripeAccountId } = req.body;
 
-    if (!amount || !Number.isInteger(amount) || amount < 100 || amount > 100000) {
-      return res.status(400).json({ error: 'Nieprawidłowa kwota (100–100 000 groszy)' });
+    if (!amount || !Number.isInteger(amount) || amount < 200 || amount > 100000) {
+      return res.status(400).json({ error: 'Minimalna kwota napiwku to 2 zł' });
     }
     if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
       return res.status(400).json({ error: 'Nieprawidłowe ID konta Stripe' });
