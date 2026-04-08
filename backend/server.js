@@ -544,11 +544,15 @@ app.get('/api/stats/:accountId', async (req, res) => {
 
     // balance_transactions zawierają dokładne opłaty pobrane przez Stripe
     const txns = await stripe.balanceTransactions.list(
-      { created: bounds, limit: 100, type: 'payment' },
+      { created: bounds, limit: 100 },
       { stripeAccount: accountId }
     );
 
-    const successful = txns.data.filter((t) => t.status === 'available' || t.status === 'pending');
+    const successful = txns.data.filter((t) =>
+      (t.status === 'available' || t.status === 'pending') &&
+      (t.type === 'payment' || t.type === 'charge') &&
+      t.amount > 0
+    );
 
     const totalAmount   = successful.reduce((sum, t) => sum + t.amount, 0) / 100;
     const totalStripeFee = successful.reduce((sum, t) => sum + t.fee, 0) / 100;
