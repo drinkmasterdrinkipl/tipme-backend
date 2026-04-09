@@ -9,29 +9,42 @@ import { useNavigation } from '@react-navigation/native';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
+const DEMO_MODE = false;
+const DEMO_PAYOUTS = [
+  { id: 'po_1', amount: 320, currency: 'pln', arrival_date: Date.now()/1000 - 86400, status: 'paid' },
+  { id: 'po_2', amount: 185, currency: 'pln', arrival_date: Date.now()/1000 - 86400*7, status: 'paid' },
+  { id: 'po_3', amount: 240, currency: 'pln', arrival_date: Date.now()/1000 - 86400*14, status: 'paid' },
+];
+
 export default function WalletScreen() {
   const navigation = useNavigation<any>();
-  const [available, setAvailable] = useState<number | null>(null);
-  const [pending, setPending] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [available, setAvailable] = useState<number | null>(DEMO_MODE ? 160 : null);
+  const [pending, setPending] = useState<number | null>(DEMO_MODE ? 45 : null);
+  const [loading, setLoading] = useState(!DEMO_MODE);
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [payouts, setPayouts] = useState<any[]>([]);
+  const [payouts, setPayouts] = useState<any[]>(DEMO_MODE ? DEMO_PAYOUTS : []);
 
   const loadBalance = useCallback(async () => {
+    if (DEMO_MODE) return;
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
-      const [balRes, payoutsRes] = await Promise.all([
+      const [balResult, payoutsResult] = await Promise.allSettled([
         apiFetch(`${API_URL}/api/balance/${accountId}`),
         apiFetch(`${API_URL}/api/payouts/${accountId}`),
       ]);
-      const balData = await balRes.json();
-      const payoutsData = await payoutsRes.json();
-      if (balData.error) throw new Error(balData.error);
-      setAvailable(balData.available);
-      setPending(balData.pending);
-      setPayouts(payoutsData.payouts || []);
+      if (balResult.status === 'fulfilled') {
+        const balData = await balResult.value.json();
+        if (!balData.error) {
+          setAvailable(balData.available);
+          setPending(balData.pending);
+        }
+      }
+      if (payoutsResult.status === 'fulfilled') {
+        const payoutsData = await payoutsResult.value.json();
+        setPayouts(payoutsData.payouts || []);
+      }
     } catch {
       setAvailable(0);
       setPending(0);
@@ -67,7 +80,7 @@ export default function WalletScreen() {
                 body: JSON.stringify({ amount: null }),
               });
               const data = await res.json();
-              if (data.error) throw new Error(data.error);
+              if (!res.ok || data.error) throw new Error(data.error || `Błąd serwera (${res.status})`);
               const arrival = new Date(data.arrivalDate).toLocaleDateString('pl-PL');
               Alert.alert('Zlecono wypłatę', `${data.amount.toFixed(2)} zł trafi na konto do ${arrival}.`);
               loadBalance();
@@ -168,7 +181,7 @@ export default function WalletScreen() {
                 {payouts.map(p => {
                   const statusColor = p.status === 'paid' ? C.success ?? '#22c55e' : p.status === 'failed' ? C.error : C.gold;
                   const statusLabel = p.status === 'paid' ? 'Wypłacono' : p.status === 'failed' ? 'Błąd' : 'W toku';
-                  const date = new Date(p.arrivalDate).toLocaleDateString('pl-PL');
+                  const date = new Date((p.arrivalDate ?? p.arrival_date) * 1000).toLocaleDateString('pl-PL');
                   return (
                     <View key={p.id} style={s.payoutRow}>
                       <View>
@@ -193,7 +206,7 @@ export default function WalletScreen() {
             {/* Informacja prawna */}
             <View style={s.legalBox}>
               <Text style={s.legalText}>
-                Płatności obsługuje Stripe Payments Europe Ltd. (licencja instytucji pieniądza elektronicznego UE). Napiwki trafiają bezpośrednio na Twoje konto — Tip For Me nie przechowuje Twoich środków.
+                Płatności obsługuje Stripe Payments Europe Ltd. (licencja instytucji pieniądza elektronicznego UE). Środki trafiają na Twoje saldo Stripe i są automatycznie wypłacane na konto bankowe. Tip For Me nie przechowuje Twoich środków.
               </Text>
             </View>
           </>

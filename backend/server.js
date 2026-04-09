@@ -127,8 +127,8 @@ app.post('/api/create-connected-account', async (req, res) => {
     }
 
     // Sprawdź czy konto z tym emailem już istnieje
-    const existing = await stripe.accounts.list({ limit: 100 });
-    const found = existing.data.find(a => a.email === email.toLowerCase().trim());
+    const existing = await stripe.accounts.search({ query: `email:'${email.toLowerCase().trim()}'`, limit: 5 });
+    const found = existing.data[0] || null;
     if (found) {
       if (found.charges_enabled) {
         return res.status(409).json({
@@ -207,8 +207,8 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Znajdź konto po emailu — preferuj konta z charges_enabled i password_hash
-    const accounts = await stripe.accounts.list({ limit: 100 });
-    const allMatches = accounts.data.filter(a => a.email === email.toLowerCase().trim());
+    const accounts = await stripe.accounts.search({ query: `email:'${email.toLowerCase().trim()}'`, limit: 10 });
+    const allMatches = accounts.data;
     if (!allMatches.length) {
       return res.status(404).json({ error: 'Nie znaleziono konta dla tego emaila' });
     }

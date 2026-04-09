@@ -19,6 +19,7 @@ export default function AccountDetailsScreen() {
     setError('');
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
+      if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
       const res = await apiFetch(`${API_URL}/api/account-details/${accountId}`);
       const json = await res.json();
       if (json.error) throw new Error(json.error);
@@ -83,7 +84,6 @@ export default function AccountDetailsScreen() {
             <View style={s.card}>
               <Text style={s.cardTitle}>DANE KONTAKTOWE</Text>
               <Row label="Email" value={data.email || '—'} />
-              {data.displayName ? <Row label="Nazwa" value={data.displayName} /> : null}
             </View>
 
             {/* Konto bankowe */}

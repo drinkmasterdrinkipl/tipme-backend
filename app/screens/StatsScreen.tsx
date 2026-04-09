@@ -125,7 +125,7 @@ export default function StatsScreen() {
   const average     = stats?.average || 0;
   // Rzeczywiste opłaty ze Stripe (gdy SIMULATED=false)
   // W trybie SIMULATED szacujemy dla pokazania UI
-  const stripeFee   = stats?.stripeFee   ?? (total * 0.015 + count * 0.42);
+  const stripeFee   = stats?.stripeFee   ?? (total * 0.014 + count * 0.40);
   const platformFee = stats?.platformFee ?? total * 0.05;
   const net         = stats?.net         ?? Math.max(0, total - stripeFee - platformFee);
 
