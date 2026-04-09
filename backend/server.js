@@ -109,7 +109,7 @@ app.use((req, res, next) => {
 // 5% = mnożnik 0.05
 // Przykład: napiwek 20 zł = 2000 gr → prowizja = 100 gr = 1 zł
 // ============================================
-const PLATFORM_FEE_PERCENT = 0.05; // 5% — zmień na ile chcesz
+const PLATFORM_FEE_PERCENT = 0.06; // 6% — prowizja platformy
 
 // ============================================
 // 1. STRIPE CONNECT — Rejestracja użytkownika
