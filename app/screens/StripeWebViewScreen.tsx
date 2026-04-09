@@ -5,7 +5,7 @@ import { WebView } from 'react-native-webview';
 import { C } from '../theme';
 
 export default function StripeWebViewScreen({ route, navigation }: any) {
-  const { url, onDone } = route.params;
+  const { url, onDone } = route.params ?? {};
   const [loading, setLoading] = useState(true);
   const webviewRef = useRef<any>(null);
 

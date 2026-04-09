@@ -37,7 +37,7 @@ const SLIDES = [
     icon: '✓',
     title: 'Potwierdzenie płatności',
     desc: 'Po udanej płatności zobaczysz ekran sukcesu z kwotą i metodą płatności. Możesz wysłać potwierdzenie na email klienta.',
-    tip: 'Środki trafiają na Twoje konto Stripe i są wypłacane następnego dnia roboczego.',
+    tip: 'Środki trafiają na Twoje konto Stripe i są wypłacane w ciągu 1–2 dni roboczych.',
   },
   {
     icon: '🔢',
@@ -72,8 +72,13 @@ export default function TapToPayEducationScreen({ navigation, route }: any) {
   };
 
   const handleFinish = async () => {
+    await AsyncStorage.setItem('tapToPayEnabled', 'true');
     await AsyncStorage.setItem('tapToPayEducationShown', 'true');
     onComplete ? onComplete() : navigation.navigate('Main');
+  };
+
+  const handleSkip = () => {
+    navigation.goBack();
   };
 
   return (
@@ -126,7 +131,7 @@ export default function TapToPayEducationScreen({ navigation, route }: any) {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={s.skipBtn} onPress={handleFinish}>
+      <TouchableOpacity style={s.skipBtn} onPress={handleSkip}>
         <Text style={s.skipText}>Pomiń</Text>
       </TouchableOpacity>
     </SafeAreaView>

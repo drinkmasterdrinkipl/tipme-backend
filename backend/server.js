@@ -524,12 +524,19 @@ function getPolandDayBounds(dateStr) {
   };
 }
 
-// Polska strefa: UTC+1 (zima) lub UTC+2 (lato)
+// Polska strefa: UTC+1 (CET zima) lub UTC+2 (CEST lato)
+// Używamy UTC — nie zależy od strefy serwera
 function getPLOffset(date) {
-  const jan = new Date(date.getFullYear(), 0, 1).getTimezoneOffset();
-  const jul = new Date(date.getFullYear(), 6, 1).getTimezoneOffset();
-  const isDST = date.getTimezoneOffset() < Math.max(jan, jul);
-  return isDST ? 2 : 1;
+  const y = date.getUTCFullYear();
+  // Ostatnia niedziela marca (zmiana na CEST o 01:00 UTC)
+  const marchEnd = new Date(Date.UTC(y, 2, 31));
+  marchEnd.setUTCDate(31 - marchEnd.getUTCDay());
+  const dstStart = new Date(marchEnd.getTime() + 3600000); // 01:00 UTC
+  // Ostatnia niedziela października (zmiana na CET o 01:00 UTC)
+  const octEnd = new Date(Date.UTC(y, 9, 31));
+  octEnd.setUTCDate(31 - octEnd.getUTCDay());
+  const dstEnd = new Date(octEnd.getTime() + 3600000); // 01:00 UTC
+  return (date >= dstStart && date < dstEnd) ? 2 : 1;
 }
 
 // ============================================
