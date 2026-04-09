@@ -2,7 +2,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Animated, Easing, Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useStripeTerminal, ErrorCode } from '@stripe/stripe-terminal-react-native';
 import type { Reader } from '@stripe/stripe-terminal-react-native';
@@ -12,36 +12,32 @@ import { C } from '../theme';
 
 // Statyczne cząsteczki w tle
 const PARTICLES = [
-  { top: 8, left: 30, size: 2, op: 0.6 },
-  { top: 20, left: 80, size: 1.5, op: 0.4 },
-  { top: 15, left: 140, size: 2.5, op: 0.7 },
-  { top: 35, left: 200, size: 1.5, op: 0.5 },
-  { top: 10, left: 260, size: 2, op: 0.6 },
-  { top: 50, left: 50, size: 1.5, op: 0.3 },
-  { top: 60, left: 110, size: 2, op: 0.5 },
-  { top: 45, left: 170, size: 1, op: 0.4 },
-  { top: 70, left: 230, size: 2.5, op: 0.6 },
-  { top: 80, left: 20, size: 2, op: 0.5 },
-  { top: 90, left: 90, size: 1.5, op: 0.3 },
-  { top: 100, left: 150, size: 2, op: 0.7 },
-  { top: 75, left: 290, size: 1.5, op: 0.4 },
-  { top: 120, left: 60, size: 2, op: 0.5 },
-  { top: 110, left: 200, size: 1, op: 0.6 },
-  { top: 130, left: 330, size: 2, op: 0.3 },
-  { top: 25, left: 310, size: 1.5, op: 0.5 },
-  { top: 55, left: 350, size: 2, op: 0.4 },
-  { top: 95, left: 120, size: 1, op: 0.6 },
-  { top: 140, left: 250, size: 1.5, op: 0.4 },
+  { top: 28, left: 30, size: 2, op: 0.6 },
+  { top: 40, left: 80, size: 1.5, op: 0.4 },
+  { top: 35, left: 140, size: 2.5, op: 0.7 },
+  { top: 55, left: 200, size: 1.5, op: 0.5 },
+  { top: 30, left: 260, size: 2, op: 0.6 },
+  { top: 70, left: 50, size: 1.5, op: 0.3 },
+  { top: 80, left: 110, size: 2, op: 0.5 },
+  { top: 65, left: 170, size: 1, op: 0.4 },
+  { top: 90, left: 230, size: 2.5, op: 0.6 },
+  { top: 100, left: 20, size: 2, op: 0.5 },
+  { top: 110, left: 90, size: 1.5, op: 0.3 },
+  { top: 120, left: 150, size: 2, op: 0.7 },
+  { top: 95, left: 290, size: 1.5, op: 0.4 },
+  { top: 140, left: 60, size: 2, op: 0.5 },
+  { top: 130, left: 200, size: 1, op: 0.6 },
+  { top: 150, left: 330, size: 2, op: 0.3 },
+  { top: 45, left: 310, size: 1.5, op: 0.5 },
+  { top: 75, left: 350, size: 2, op: 0.4 },
+  { top: 115, left: 120, size: 1, op: 0.6 },
+  { top: 160, left: 250, size: 1.5, op: 0.4 },
 ];
 
 const SIMULATED = false;
 
 export default function TapScreen({ navigation, route }: any) {
   const amount: number = route.params?.amount ?? 0;
-  if (!amount || amount <= 0) {
-    navigation.goBack();
-    return null;
-  }
   const amountZl = (amount / 100 % 1 === 0)
     ? (amount / 100).toFixed(0)
     : (amount / 100).toFixed(2);
@@ -52,26 +48,6 @@ export default function TapScreen({ navigation, route }: any) {
   const [initStep, setInitStep] = useState('Inicjalizacja SDK...');
   const discoveredRef = useRef<Reader.Type[]>([]);
 
-  // Animacja pulsu NFC
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const opacityAnim = useRef(new Animated.Value(0.5)).current;
-
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(pulseAnim, { toValue: 1.22, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(opacityAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        ]),
-        Animated.parallel([
-          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          Animated.timing(opacityAnim, { toValue: 0.5, duration: 1000, useNativeDriver: true }),
-        ]),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, []);
 
   const {
     discoverReaders, connectReader, disconnectReader,
@@ -81,6 +57,7 @@ export default function TapScreen({ navigation, route }: any) {
   });
 
   useEffect(() => {
+    if (!amount || amount <= 0) { navigation.goBack(); return; }
     initializeReader();
     return () => { disconnectReader().catch(() => {}); };
   }, []);
@@ -88,6 +65,20 @@ export default function TapScreen({ navigation, route }: any) {
   useEffect(() => {
     if (status === 'ready') processPayment();
   }, [status]);
+
+  const translateError = (msg: string): string => {
+    if (!msg) return 'Nieznany błąd';
+    if (msg.includes('Already connected')) return 'Czytnik już połączony. Trwa rozłączanie, spróbuj ponownie.';
+    if (msg.includes('Network request failed') || msg.includes('network')) return 'Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.';
+    if (msg.includes('timed out') || msg.includes('timeout') || msg.includes('Przekroczono czas')) return 'Przekroczono czas oczekiwania. Spróbuj ponownie.';
+    if (msg.includes('canceled') || msg.includes('Canceled')) return 'Płatność anulowana.';
+    if (msg.includes('declined')) return 'Karta odrzucona. Spróbuj inną kartą.';
+    if (msg.includes('insufficient_funds')) return 'Niewystarczające środki na karcie.';
+    if (msg.includes('No reader')) return 'Nie znaleziono czytnika.';
+    if (msg.includes('location')) return 'Brak lokalizacji Stripe. Wyloguj się i zaloguj ponownie.';
+    if (msg.includes('server') || msg.includes('Server') || msg.includes('500') || msg.includes('503')) return 'Błąd serwera. Spróbuj za chwilę.';
+    return msg;
+  };
 
   const initializeReader = async () => {
     try {
@@ -109,6 +100,9 @@ export default function TapScreen({ navigation, route }: any) {
         setStatus('ready');
         return;
       }
+
+      // Rozłącz poprzednią sesję, jeśli istnieje
+      await disconnectReader().catch(() => {});
 
       discoveredRef.current = [];
       setInitStep('Szukanie czytnika...');
@@ -140,7 +134,7 @@ export default function TapScreen({ navigation, route }: any) {
       setStatus('ready');
     } catch (error: any) {
       setStatus('error');
-      setErrorMsg(error.message || 'Błąd połączenia');
+      setErrorMsg(translateError(error.message || ''));
     }
   };
 
@@ -189,7 +183,7 @@ export default function TapScreen({ navigation, route }: any) {
 
       const { paymentIntent: collectedPI, error: collectError } = await collectPaymentMethod({ paymentIntent: retrievedPI! });
       if (collectError) {
-        if (collectError.code === ErrorCode.CANCELED) { setStatus('ready'); return; }
+        if (collectError.code === ErrorCode.CANCELED) { navigation.goBack(); return; }
         throw new Error(collectError.message);
       }
 
@@ -206,21 +200,20 @@ export default function TapScreen({ navigation, route }: any) {
       });
     } catch (error: any) {
       setStatus('error');
-      setErrorMsg(error.message || 'Błąd płatności');
+      setErrorMsg(translateError(error.message || ''));
     }
   };
 
   return (
-    <SafeAreaView style={s.root} edges={['bottom']}>
+    <SafeAreaView style={s.root} edges={[]}>
 
       {/* Przycisk powrotu */}
       <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
         <Text style={s.backIcon}>←</Text>
       </TouchableOpacity>
 
-      {/* Górna strefa — ciemna z cząsteczkami */}
+      {/* Górna strefa */}
       <View style={s.nfcZone}>
-        {/* Cząsteczki w tle */}
         {PARTICLES.map((p, i) => (
           <View key={i} style={[s.particle, {
             top: p.top, left: p.left,
@@ -229,22 +222,6 @@ export default function TapScreen({ navigation, route }: any) {
             opacity: p.op,
           }]} />
         ))}
-
-        {/* Kontener kółek z napisem na dole */}
-        <View style={s.ringContainer}>
-          <Animated.View style={[s.ringOuter, { transform: [{ scale: pulseAnim }], opacity: opacityAnim }]} />
-          <View style={s.ringInner}>
-            <Image
-              source={require('../assets/contactless.webp')}
-              style={s.contactlessIcon}
-              resizeMode="contain"
-            />
-          </View>
-          {/* Napis na dole kółka */}
-          <Text style={s.hint}>Zbliż tutaj, aby zapłacić</Text>
-        </View>
-
-
         {status === 'connecting' && (
           <View style={s.connectRow}>
             <ActivityIndicator size="small" color={'rgba(255,255,255,0.4)'} />
@@ -317,7 +294,7 @@ export default function TapScreen({ navigation, route }: any) {
               </View>
               <View style={s.infoGridItem}>
                 <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
-                <Text style={s.infoGridText}>Środki trafiają{'\n'}bezpośrednio do Ciebie</Text>
+                <Text style={s.infoGridText}>Wypłata na konto{'\n'}1-2 dni robocze</Text>
               </View>
               <View style={s.infoGridItem}>
                 <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
@@ -339,7 +316,7 @@ export default function TapScreen({ navigation, route }: any) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#080810' },
+  root: { flex: 1, backgroundColor: '#070511' },
 
   back: {
     position: 'absolute', top: 60, left: 16, zIndex: 10,
@@ -352,51 +329,16 @@ const s = StyleSheet.create({
 
   // Górna strefa
   nfcZone: {
-    height: 310,
+    height: 255,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 0,
     marginTop: -40,
     overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.035)',
   },
   particle: {
     position: 'absolute',
     backgroundColor: '#5b7cff',
-  },
-  ringContainer: {
-    width: 220, height: 220,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 24,
-  },
-  ringOuter: {
-    position: 'absolute',
-    width: 220, height: 220, borderRadius: 110,
-    borderWidth: 1, borderColor: 'rgba(168,85,247,0.2)',
-    backgroundColor: 'rgba(168,85,247,0.05)',
-  },
-  ringInner: {
-    width: 130, height: 130, borderRadius: 65,
-    backgroundColor: '#2d1f5e',
-    borderWidth: 2, borderColor: '#7c3aed',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  contactlessIcon: {
-    width: 60, height: 60,
-    tintColor: '#ffffff',
-  },
-  nfcWaves: {
-    fontSize: 48, color: '#fff',
-    fontWeight: '900', lineHeight: 56,
-    marginHorizontal: -4,
-  },
-  nfcWaves2: { opacity: 0.7, fontSize: 36 },
-  nfcWaves3: { opacity: 0.4, fontSize: 24 },
-  hint: {
-    position: 'absolute',
-    bottom: 16,
-    fontSize: 16, fontWeight: '700',
-    color: '#ffffff',
-    textAlign: 'center',
   },
   connectRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -406,30 +348,20 @@ const s = StyleSheet.create({
   // Karta dolna
   cardWrapper: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 24,
+    paddingTop: 0,
   },
   card: {
-    borderRadius: 28,
-    backgroundColor: '#13112a',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-    padding: 24,
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 40,
     flex: 1,
+    justifyContent: 'space-between',
   },
 
   // Merchant header
   merchantRow: {
     flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 24,
-  },
-  merchantAvatar: {
-    width: 52, height: 52, borderRadius: 16,
-    backgroundColor: '#3b1f7a',
-    borderWidth: 1, borderColor: 'rgba(167,139,250,0.3)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  merchantAvatarText: {
-    fontSize: 22, fontWeight: '800', color: '#c4b5fd',
   },
   merchantInfo: { flex: 1 },
   merchantName: {
@@ -448,14 +380,17 @@ const s = StyleSheet.create({
   // Kwota
   amountBlock: {
     marginBottom: 20,
+    alignItems: 'center',
   },
   amountLabel: {
     fontSize: 12, color: 'rgba(255,255,255,0.35)',
     fontWeight: '600', letterSpacing: 0.8,
     textTransform: 'uppercase', marginBottom: 4,
+    textAlign: 'center',
   },
   amountValue: {
     fontSize: 58, fontWeight: '900', color: '#ffffff', letterSpacing: -2, lineHeight: 66,
+    textAlign: 'center',
   },
   amountCurr: {
     fontSize: 26, fontWeight: '700', color: 'rgba(255,255,255,0.45)', letterSpacing: 0,

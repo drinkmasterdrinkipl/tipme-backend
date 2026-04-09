@@ -1,10 +1,11 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput,
-  StyleSheet, ScrollView, KeyboardAvoidingView, Platform,
+  StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
@@ -15,10 +16,14 @@ export default function HomeScreen({ navigation }: any) {
   const [customAmount, setCustomAmount] = useState('');
   const [todayTotal, setTodayTotal] = useState(0);
   const [todayCount, setTodayCount] = useState(0);
+  const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
 
   const finalAmount = selectedPreset || parseFloat(customAmount) || 0;
 
-  useEffect(() => { loadStats(); }, []);
+  useFocusEffect(useCallback(() => {
+    loadStats();
+    AsyncStorage.getItem('tapToPayEnabled').then(v => setTapToPayEnabled(v === 'true'));
+  }, []));
 
   const loadStats = async () => {
     try {
@@ -38,7 +43,11 @@ export default function HomeScreen({ navigation }: any) {
   const typeCustom = (val: string) => { setCustomAmount(val); setSelectedPreset(null); };
 
   const startPayment = () => {
-    if (finalAmount <= 0) return;
+    if (!tapToPayEnabled) {
+      Alert.alert('Tap to Pay wyłączony', 'Włącz Tap to Pay w Ustawieniach, aby przyjmować płatności.');
+      return;
+    }
+    if (finalAmount < 2) return;
     navigation.navigate('Tap', { amount: Math.round(finalAmount * 100) });
   };
 
@@ -77,7 +86,11 @@ export default function HomeScreen({ navigation }: any) {
             <Text style={s.heroSub}>
               {todayCount === 0
                 ? 'Brak napiwków — zacznij teraz'
-                : `${todayCount} ${todayCount === 1 ? 'napiwek' : 'napiwków'} dzisiaj`}
+                : `${todayCount} ${
+                    todayCount === 1 ? 'napiwek' :
+                    (todayCount % 10 >= 2 && todayCount % 10 <= 4 && (todayCount % 100 < 10 || todayCount % 100 >= 20)) ? 'napiwki' :
+                    'napiwków'
+                  } dzisiaj`}
             </Text>
           </View>
 
@@ -121,18 +134,16 @@ export default function HomeScreen({ navigation }: any) {
           {/* CTA — wewnątrz ScrollView */}
           <View style={s.ctaWrap}>
             <TouchableOpacity
-              style={[s.cta, finalAmount > 0 && s.ctaActive]}
+              style={[s.cta, tapToPayEnabled && finalAmount >= 2 && s.ctaActive]}
               onPress={startPayment}
-              disabled={finalAmount <= 0}
               activeOpacity={0.85}
-              accessibilityLabel={finalAmount > 0 ? `Pobierz napiwek ${finalAmount} złotych` : 'Wybierz kwotę napiwku'}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: finalAmount <= 0 }}
             >
-              <Text style={[s.ctaText, finalAmount > 0 && s.ctaTextActive]}>
-                {finalAmount > 0
-                  ? `Pobierz  ${finalAmount % 1 === 0 ? finalAmount.toFixed(0) : finalAmount.toFixed(2)} zł`
-                  : 'Wybierz kwotę'}
+              <Text style={[s.ctaText, tapToPayEnabled && finalAmount >= 2 && s.ctaTextActive]}>
+                {!tapToPayEnabled
+                  ? 'Włącz Tap to Pay w Ustawieniach'
+                  : finalAmount >= 2
+                    ? `Pobierz  ${finalAmount % 1 === 0 ? finalAmount.toFixed(0) : finalAmount.toFixed(2)} zł`
+                    : finalAmount > 0 ? 'Minimalna kwota: 2 zł' : 'Wybierz kwotę'}
               </Text>
             </TouchableOpacity>
           </View>
