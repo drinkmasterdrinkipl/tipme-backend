@@ -10,7 +10,7 @@ import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
-const TIP_PRESETS = [5, 10, 15, 20, 30, 50];
+const TIP_PRESETS = [5, 10, 15, 20, 30, 50, 100, 200];
 
 export default function HomeScreen({ navigation }: any) {
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
@@ -78,25 +78,6 @@ export default function HomeScreen({ navigation }: any) {
               <View style={s.badgeDot} />
               <Text style={s.badgeText}>Live</Text>
             </View>
-          </View>
-
-          {/* Hero */}
-          <View style={s.hero}>
-            <Text style={s.heroLabel}>NAPIWKI DZIŚ</Text>
-            <Text style={s.heroAmount}>
-              {todayTotal.toFixed(0)}
-              <Text style={s.heroCurrency}> zł</Text>
-            </Text>
-            <View style={s.heroDivider} />
-            <Text style={s.heroSub}>
-              {todayCount === 0
-                ? 'Brak napiwków — zacznij teraz'
-                : `${todayCount} ${
-                    todayCount === 1 ? 'napiwek' :
-                    (todayCount % 10 >= 2 && todayCount % 10 <= 4 && (todayCount % 100 < 10 || todayCount % 100 >= 20)) ? 'napiwki' :
-                    'napiwków'
-                  } dzisiaj`}
-            </Text>
           </View>
 
           {/* Presety */}
@@ -174,23 +155,17 @@ const s = StyleSheet.create({
   },
   badgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.success },
   badgeText: { fontSize: 11, fontWeight: '700', color: C.success },
-  hero: { alignItems: 'center', paddingVertical: 20, paddingHorizontal: 24 },
-  heroLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 3, color: C.text3, marginBottom: 8 },
-  heroAmount: { fontSize: 60, fontWeight: '900', color: C.text1, letterSpacing: -3, lineHeight: 64 },
-  heroCurrency: { fontSize: 32, fontWeight: '700', color: C.text2, letterSpacing: 0 },
-  heroDivider: { width: 32, height: 2, borderRadius: 1, backgroundColor: C.primaryLight, marginVertical: 14, opacity: 0.4 },
-  heroSub: { fontSize: 13, color: C.text3, fontWeight: '500' },
   sectionLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 2.5, color: C.text3, paddingHorizontal: 24, marginBottom: 12 },
-  presets: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 10, marginBottom: 28 },
+  presets: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 10, marginBottom: 20 },
   presetBtn: {
-    width: '30%', paddingVertical: 20, borderRadius: 20,
+    width: '47%', paddingVertical: 28, borderRadius: 24,
     borderWidth: 1, borderColor: C.cardBorder, backgroundColor: C.card,
     alignItems: 'center', justifyContent: 'center',
   },
   presetBtnActive: { borderColor: C.cardBorderActive, backgroundColor: C.primaryFaint },
-  presetVal: { fontSize: 26, fontWeight: '900', color: C.text3 },
+  presetVal: { fontSize: 36, fontWeight: '900', color: C.text3 },
   presetValActive: { color: C.text1 },
-  presetCurr: { fontSize: 11, fontWeight: '700', color: C.text4, marginTop: 1 },
+  presetCurr: { fontSize: 13, fontWeight: '700', color: C.text4, marginTop: 2 },
   presetCurrActive: { color: C.primaryLight },
   customWrap: { paddingHorizontal: 24, marginBottom: 16 },
   inputRow: {
