@@ -215,19 +215,22 @@ export default function TapScreen({ navigation, route }: any) {
   return (
     <SafeAreaView style={s.root}>
 
-      {/* Przycisk powrotu */}
-      <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
-        <Text style={s.backIcon}>←</Text>
-      </TouchableOpacity>
-
-      {/* Środek — merchant + kwota + status */}
-      <View style={s.center}>
-        <Text style={s.merchantName}>Tip For Me</Text>
-        <View style={s.verifiedBadge}>
-          <View style={s.verifiedDot} />
-          <Text style={s.verifiedText}>Zweryfikowany odbiorca</Text>
+      {/* Góra — przycisk powrotu + merchant */}
+      <View style={s.topBar}>
+        <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
+          <Text style={s.backIcon}>←</Text>
+        </TouchableOpacity>
+        <View style={s.merchantHeader}>
+          <Text style={s.merchantName}>Tip For Me</Text>
+          <View style={s.verifiedBadge}>
+            <View style={s.verifiedDot} />
+            <Text style={s.verifiedText}>Zweryfikowany odbiorca</Text>
+          </View>
         </View>
+      </View>
 
+      {/* Środek — kwota + status */}
+      <View style={s.center}>
         <View style={s.amountBlock}>
           <Text style={s.amountLabel}>DO ZAPŁATY</Text>
           <Text style={s.amountValue}>{amountZl}<Text style={s.amountCurr}> zł</Text></Text>
@@ -295,24 +298,27 @@ export default function TapScreen({ navigation, route }: any) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
 
+  topBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16, gap: 14,
+  },
   back: {
-    marginTop: 8, marginLeft: 16, marginBottom: 4,
     width: 42, height: 42, borderRadius: 14,
-    backgroundColor: C.card,
-    borderWidth: 1, borderColor: C.cardBorder,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
     alignItems: 'center', justifyContent: 'center',
   },
   backIcon: { color: C.text2, fontSize: 18 },
+  merchantHeader: { flex: 1 },
+  merchantName: { fontSize: 18, fontWeight: '800', color: C.text1, marginBottom: 4 },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  verifiedDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.success },
+  verifiedText: { fontSize: 12, color: C.success, fontWeight: '600' },
 
   // Centrum
   center: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  merchantName: { fontSize: 18, fontWeight: '800', color: C.text1, marginBottom: 6 },
-  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 32 },
-  verifiedDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.success },
-  verifiedText: { fontSize: 12, color: C.success, fontWeight: '600' },
 
   // Kwota
   amountBlock: { alignItems: 'center', marginBottom: 24 },
