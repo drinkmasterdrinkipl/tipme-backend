@@ -106,6 +106,7 @@ export default function AccountDetailsScreen() {
                 onPress={async () => {
                   try {
                     const accountId = await AsyncStorage.getItem('stripeAccountId');
+                    if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
                     const res = await apiFetch(`${API_URL}/api/dashboard-link/${accountId}`);
                     const json = await res.json();
                     if (json.url) navigation.navigate('StripeWebView', { url: json.url });

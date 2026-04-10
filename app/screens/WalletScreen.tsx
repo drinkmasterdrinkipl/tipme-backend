@@ -25,9 +25,11 @@ export default function WalletScreen() {
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [payouts, setPayouts] = useState<any[]>(DEMO_MODE ? DEMO_PAYOUTS : []);
+  const [loadError, setLoadError] = useState('');
 
   const loadBalance = useCallback(async () => {
     if (DEMO_MODE) return;
+    setLoadError('');
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
@@ -35,18 +37,22 @@ export default function WalletScreen() {
         apiFetch(`${API_URL}/api/balance/${accountId}`),
         apiFetch(`${API_URL}/api/payouts/${accountId}`),
       ]);
+      let balFailed = true;
       if (balResult.status === 'fulfilled') {
         const balData = await balResult.value.json();
         if (!balData.error) {
           setAvailable(balData.available);
           setPending(balData.pending);
+          balFailed = false;
         }
       }
       if (payoutsResult.status === 'fulfilled') {
         const payoutsData = await payoutsResult.value.json();
         setPayouts(payoutsData.payouts || []);
       }
-    } catch {
+      if (balFailed) setLoadError('Nie udało się pobrać salda. Sprawdź połączenie.');
+    } catch (e: any) {
+      setLoadError(e.message || 'Nie udało się pobrać danych.');
       setAvailable(0);
       setPending(0);
     } finally {
@@ -128,6 +134,13 @@ export default function WalletScreen() {
 
         {loading ? (
           <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 60 }} />
+        ) : loadError ? (
+          <View style={s.errorBox}>
+            <Text style={s.errorBoxText}>{loadError}</Text>
+            <TouchableOpacity style={s.retryBtn2} onPress={loadBalance}>
+              <Text style={s.retryBtn2Text}>Spróbuj ponownie</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <>
             {/* Saldo dostępne */}
@@ -287,6 +300,10 @@ const s = StyleSheet.create({
     padding: 14, marginBottom: 16,
   },
   firstPayoutText: { fontSize: 12, color: C.primaryLight, lineHeight: 18 },
+  errorBox: { alignItems: 'center', marginTop: 80, paddingHorizontal: 24 },
+  errorBoxText: { color: C.error, fontSize: 14, textAlign: 'center', marginBottom: 16, lineHeight: 20 },
+  retryBtn2: { paddingVertical: 10, paddingHorizontal: 24, borderRadius: 12, borderWidth: 1, borderColor: C.cardBorder },
+  retryBtn2Text: { color: C.primaryLight, fontWeight: '700' },
   legalBox: {
     backgroundColor: C.card, borderRadius: 14,
     borderWidth: 1, borderColor: C.cardBorder, padding: 16,

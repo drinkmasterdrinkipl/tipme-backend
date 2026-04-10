@@ -9,6 +9,12 @@ export default function StripeWebViewScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const webviewRef = useRef<any>(null);
 
+  // Guard: brak url → wróć
+  if (!url) {
+    navigation.goBack();
+    return null;
+  }
+
   const handleNavigationChange = (navState: any) => {
     // Stripe przekierowuje na return_url po ukończeniu onboardingu
     if (navState.url?.includes('/stripe/success') || navState.url?.includes('return_url')) {

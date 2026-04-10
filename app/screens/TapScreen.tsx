@@ -56,10 +56,18 @@ export default function TapScreen({ navigation, route }: any) {
     onUpdateDiscoveredReaders: (readers) => { discoveredRef.current = readers; },
   });
 
+  const statusRef = useRef(status);
+  useEffect(() => { statusRef.current = status; }, [status]);
+
   useEffect(() => {
     if (!amount || amount <= 0) { navigation.goBack(); return; }
     initializeReader();
-    return () => { disconnectReader().catch(() => {}); };
+    return () => {
+      // Nie rozłączaj podczas aktywnej transakcji — przerwałoby płatność
+      if (statusRef.current !== 'processing') {
+        disconnectReader().catch(() => {});
+      }
+    };
   }, []);
 
   useEffect(() => {

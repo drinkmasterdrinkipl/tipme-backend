@@ -74,7 +74,7 @@ export default function TapToPayEducationScreen({ navigation, route }: any) {
   const handleFinish = async () => {
     await AsyncStorage.setItem('tapToPayEnabled', 'true');
     await AsyncStorage.setItem('tapToPayEducationShown', 'true');
-    onComplete ? onComplete() : navigation.navigate('Main');
+    typeof onComplete === 'function' ? onComplete() : navigation.navigate('Main');
   };
 
   const handleSkip = () => {
