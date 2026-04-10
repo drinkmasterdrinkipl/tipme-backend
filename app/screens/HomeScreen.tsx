@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
+import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
 const TIP_PRESETS = [5, 10, 15, 20, 30, 50];
 
@@ -23,6 +24,10 @@ export default function HomeScreen({ navigation }: any) {
   useFocusEffect(useCallback(() => {
     loadStats();
     AsyncStorage.getItem('tapToPayEnabled').then(v => setTapToPayEnabled(v === 'true'));
+  }, []));
+
+  useRefreshOnNewDay(useCallback(() => {
+    loadStats();
   }, []));
 
   const loadStats = async () => {

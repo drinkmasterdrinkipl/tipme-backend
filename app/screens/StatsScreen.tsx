@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
+import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
 // ─── Helpers ─────────────────────────────────────────────
 const MONTHS = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
@@ -117,6 +118,7 @@ export default function StatsScreen() {
   }, []);
 
   useEffect(() => { loadStats(selectedDate); }, [selectedDate]);
+  useRefreshOnNewDay(useCallback(() => { loadStats(todayStr()); }, [loadStats]));
 
   const handleSelect = (date: string) => { setSelectedDate(date); };
 

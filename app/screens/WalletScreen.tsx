@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
+import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
 const DEMO_MODE = false;
 const DEMO_PAYOUTS = [
@@ -55,6 +56,7 @@ export default function WalletScreen() {
   }, []);
 
   useEffect(() => { loadBalance(); }, [loadBalance]);
+  useRefreshOnNewDay(useCallback(() => { loadBalance(); }, [loadBalance]));
 
   const onRefresh = () => { setRefreshing(true); loadBalance(); };
 
@@ -151,6 +153,15 @@ export default function WalletScreen() {
               <View style={s.infoBox}>
                 <Text style={s.infoText}>
                   Oczekujące środki ({pending?.toFixed(2)} zł) pojawią się jako dostępne po rozliczeniu przez Stripe (zwykle 2 dni robocze).
+                </Text>
+              </View>
+            )}
+
+            {/* Info o pierwszej wypłacie */}
+            {payouts.length === 0 && (
+              <View style={s.firstPayoutBox}>
+                <Text style={s.firstPayoutText}>
+                  ℹ️  Pierwsza wypłata może zająć do 7 dni roboczych — Stripe weryfikuje konto. Kolejne wypłaty trwają 1–2 dni.
                 </Text>
               </View>
             )}
@@ -270,6 +281,12 @@ const s = StyleSheet.create({
   dashboardBtnInner: { alignItems: 'center' },
   dashboardBtnText: { color: C.primaryLight, fontSize: 15, fontWeight: '700' },
   dashboardBtnSub: { color: C.text3, fontSize: 12, marginTop: 4 },
+  firstPayoutBox: {
+    backgroundColor: 'rgba(99,102,241,0.07)', borderRadius: 14,
+    borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)',
+    padding: 14, marginBottom: 16,
+  },
+  firstPayoutText: { fontSize: 12, color: C.primaryLight, lineHeight: 18 },
   legalBox: {
     backgroundColor: C.card, borderRadius: 14,
     borderWidth: 1, borderColor: C.cardBorder, padding: 16,

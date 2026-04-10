@@ -1,9 +1,10 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
+import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
 const PAGE_SIZE = 15;
 const DEMO_MODE = false;
@@ -65,6 +66,7 @@ export default function HistoryScreen() {
   const [page, setPage] = useState(1);
 
   useEffect(() => { if (!DEMO_MODE) loadTransactions(); }, []);
+  useRefreshOnNewDay(useCallback(() => { if (!DEMO_MODE) loadTransactions(); }, []));
 
   const loadTransactions = async () => {
     setLoading(true);
