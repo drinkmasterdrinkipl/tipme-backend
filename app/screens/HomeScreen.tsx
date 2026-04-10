@@ -58,6 +58,18 @@ export default function HomeScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.root}>
+      {/* Header — zawsze na górze */}
+      <View style={s.header}>
+        <View>
+          <Text style={s.brand}>Tip For Me</Text>
+          <Text style={s.brandSub}>Terminal napiwkowy</Text>
+        </View>
+        <View style={s.badge}>
+          <View style={s.badgeDot} />
+          <Text style={s.badgeText}>Live</Text>
+        </View>
+      </View>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -68,17 +80,6 @@ export default function HomeScreen({ navigation }: any) {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
-          <View style={s.header}>
-            <View>
-              <Text style={s.brand}>Tip For Me</Text>
-              <Text style={s.brandSub}>Terminal napiwkowy</Text>
-            </View>
-            <View style={s.badge}>
-              <View style={s.badgeDot} />
-              <Text style={s.badgeText}>Live</Text>
-            </View>
-          </View>
 
           {/* Presety */}
           <Text style={s.sectionLabel}>WYBIERZ KWOTĘ</Text>
