@@ -24,14 +24,14 @@ const SLIDES = [
   {
     icon: '💳',
     title: 'Karty zbliżeniowe',
-    desc: 'Klient przykłada kartę do tylnej części Twojego iPhone\'a. Trzymaj kartę nieruchomo przez 1-2 sekundy.',
+    desc: 'Klient przykłada kartę do przedniej części Twojego iPhone\'a. Trzymaj kartę nieruchomo przez 1-2 sekundy.',
     tip: 'Działa z kartami Visa, Mastercard, Maestro i innymi kartami zbliżeniowymi.',
   },
   {
     icon: '📱',
     title: 'Apple Pay i portfele cyfrowe',
     desc: 'Klient może zapłacić telefonem, zegarkiem lub innym urządzeniem z Apple Pay lub Google Pay.',
-    tip: 'Przykładaj urządzenie w to samo miejsce co kartę — do tylnej części Twojego iPhone\'a.',
+    tip: 'Przykładaj urządzenie w to samo miejsce co kartę — do przedniej części Twojego iPhone\'a.',
   },
   {
     icon: '✓',
