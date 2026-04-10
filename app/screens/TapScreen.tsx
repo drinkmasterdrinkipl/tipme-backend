@@ -72,9 +72,9 @@ export default function TapScreen({ navigation, route }: any) {
 
   useEffect(() => {
     if (status === 'ready') processPayment();
-  }, [status]);
+  }, [status, processPayment]);
 
-  const translateError = (msg: string): string => {
+  const translateError = useCallback((msg: string): string => {
     if (!msg) return 'Nieznany błąd';
     if (msg.includes('Already connected')) return 'Czytnik już połączony. Trwa rozłączanie, spróbuj ponownie.';
     if (msg.includes('Network request failed') || msg.includes('network')) return 'Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.';
@@ -86,7 +86,7 @@ export default function TapScreen({ navigation, route }: any) {
     if (msg.includes('location')) return 'Brak lokalizacji Stripe. Wyloguj się i zaloguj ponownie.';
     if (msg.includes('server') || msg.includes('Server') || msg.includes('500') || msg.includes('503')) return 'Błąd serwera. Spróbuj za chwilę.';
     return msg;
-  };
+  }, []);
 
   const initializeReader = async () => {
     try {
@@ -146,7 +146,7 @@ export default function TapScreen({ navigation, route }: any) {
     }
   };
 
-  const processPayment = async () => {
+  const processPayment = useCallback(async () => {
     try {
       setStatus('processing');
 
@@ -210,7 +210,7 @@ export default function TapScreen({ navigation, route }: any) {
       setStatus('error');
       setErrorMsg(translateError(error.message || ''));
     }
-  };
+  }, [amount, amountZl, navigation, collectPaymentMethod, confirmPaymentIntent, retrievePaymentIntent, translateError]);
 
   return (
     <SafeAreaView style={s.root}>

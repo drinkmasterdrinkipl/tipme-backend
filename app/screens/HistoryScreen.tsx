@@ -65,10 +65,7 @@ export default function HistoryScreen() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
 
-  useEffect(() => { if (!DEMO_MODE) loadTransactions(); }, []);
-  useRefreshOnNewDay(useCallback(() => { if (!DEMO_MODE) loadTransactions(); }, []));
-
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -85,7 +82,10 @@ export default function HistoryScreen() {
     } catch (e: any) {
       setError(e.message || 'Nie udało się pobrać historii');
     } finally { setLoading(false); }
-  };
+  }, []);
+
+  useEffect(() => { if (!DEMO_MODE) loadTransactions(); }, [loadTransactions]);
+  useRefreshOnNewDay(useCallback(() => { if (!DEMO_MODE) loadTransactions(); }, [loadTransactions]));
 
   const totalPages = Math.max(1, Math.ceil(transactions.length / PAGE_SIZE));
   const pageTxs = transactions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
