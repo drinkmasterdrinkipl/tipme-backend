@@ -222,10 +222,7 @@ export default function TapScreen({ navigation, route }: any) {
         </TouchableOpacity>
         <View style={s.merchantHeader}>
           <Text style={s.merchantName}>Tip For Me</Text>
-          <View style={s.verifiedBadge}>
-            <View style={s.verifiedDot} />
-            <Text style={s.verifiedText}>Zweryfikowany odbiorca</Text>
-          </View>
+          <Text style={s.merchantSub}>Terminal napiwkowy</Text>
         </View>
       </View>
 
@@ -309,10 +306,8 @@ const s = StyleSheet.create({
   },
   backIcon: { color: C.text2, fontSize: 18 },
   merchantHeader: { flex: 1 },
-  merchantName: { fontSize: 18, fontWeight: '800', color: C.text1, marginBottom: 4 },
-  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  verifiedDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.success },
-  verifiedText: { fontSize: 12, color: C.success, fontWeight: '600' },
+  merchantName: { fontSize: 18, fontWeight: '800', color: C.text1, marginBottom: 2 },
+  merchantSub: { fontSize: 12, color: C.text3, fontWeight: '500' },
 
   // Centrum
   center: {
