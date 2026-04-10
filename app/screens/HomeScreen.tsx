@@ -10,7 +10,7 @@ import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
-const TIP_PRESETS = [5, 10, 15, 20, 30, 50, 100, 200];
+const TIP_PRESETS = [5, 10, 15, 20, 30, 40, 50, 100, 200];
 
 export default function HomeScreen({ navigation }: any) {
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
@@ -156,7 +156,7 @@ const s = StyleSheet.create({
   badgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.success },
   badgeText: { fontSize: 11, fontWeight: '700', color: C.success },
   sectionLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 2.5, color: C.text3, paddingHorizontal: 24, marginBottom: 12 },
-  presets: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 8, marginBottom: 16 },
+  presets: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', paddingHorizontal: 16, gap: 8, marginBottom: 16 },
   presetBtn: {
     width: '31%', paddingVertical: 18, borderRadius: 20,
     borderWidth: 1, borderColor: C.cardBorder, backgroundColor: C.card,
