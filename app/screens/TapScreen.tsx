@@ -213,109 +213,78 @@ export default function TapScreen({ navigation, route }: any) {
   };
 
   return (
-    <SafeAreaView style={s.root} edges={[]}>
+    <SafeAreaView style={s.root}>
 
       {/* Przycisk powrotu */}
       <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
         <Text style={s.backIcon}>←</Text>
       </TouchableOpacity>
 
-      {/* Górna strefa */}
-      <View style={s.nfcZone}>
-        {PARTICLES.map((p, i) => (
-          <View key={i} style={[s.particle, {
-            top: p.top, left: p.left,
-            width: p.size, height: p.size,
-            borderRadius: p.size / 2,
-            opacity: p.op,
-          }]} />
-        ))}
+      {/* Środek — merchant + kwota + status */}
+      <View style={s.center}>
+        <Text style={s.merchantName}>Tip For Me</Text>
+        <View style={s.verifiedBadge}>
+          <View style={s.verifiedDot} />
+          <Text style={s.verifiedText}>Zweryfikowany odbiorca</Text>
+        </View>
+
+        <View style={s.amountBlock}>
+          <Text style={s.amountLabel}>DO ZAPŁATY</Text>
+          <Text style={s.amountValue}>{amountZl}<Text style={s.amountCurr}> zł</Text></Text>
+        </View>
+
         {status === 'connecting' && (
-          <View style={s.connectRow}>
-            <ActivityIndicator size="small" color={'rgba(255,255,255,0.4)'} />
-            <Text style={s.connectText}>{initStep}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Karta dolna */}
-      <View style={s.cardWrapper}>
-        <View style={s.card}>
-
-          {/* Merchant header */}
-          <View style={s.merchantRow}>
-            <View style={s.merchantInfo}>
-              <Text style={s.merchantName}>Tip For Me</Text>
-              <View style={s.verifiedBadge}>
-                <View style={s.verifiedDot} />
-                <Text style={s.verifiedText}>Zweryfikowany odbiorca</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Kwota */}
-          <View style={s.amountBlock}>
-            <Text style={s.amountLabel}>Do zapłaty</Text>
-            <Text style={s.amountValue}>{amountZl}<Text style={s.amountCurr}> zł</Text></Text>
-          </View>
-
-          {/* Status bar */}
-          {status === 'connecting' && (
+          <>
             <View style={s.progressBar}>
               <View style={[s.progressFill, { width: `${initProgress}%` as any }]} />
             </View>
-          )}
-          {status === 'processing' && (
-            <View style={s.statusPill}>
-              <ActivityIndicator size="small" color="#a78bfa" style={{ marginRight: 8 }} />
-              <Text style={s.statusPillText}>Oczekiwanie na płatność...</Text>
+            <View style={s.connectRow}>
+              <ActivityIndicator size="small" color={C.text3} />
+              <Text style={s.connectText}>{initStep}</Text>
             </View>
-          )}
-          {status === 'error' && (
-            <>
-              <View style={s.errorPill}>
-                <Text style={s.errorPillText}>{errorMsg}</Text>
-              </View>
-              <TouchableOpacity style={s.retryBtn} onPress={initializeReader}>
-                <Text style={s.retryText}>Spróbuj ponownie</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {/* Metody płatności + info */}
-          <View style={s.infoSection}>
-            <View style={s.infoSectionDivider} />
-
-            <Text style={s.infoSectionLabel}>Akceptowane metody płatności</Text>
-            <View style={s.methodsRow}>
-              {['VISA', 'Mastercard', 'AMEX', 'Apple Pay'].map(m => (
-                <View key={m} style={s.methodChip}>
-                  <Text style={s.methodChipText}>{m}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={s.infoGrid}>
-              <View style={s.infoGridItem}>
-                <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
-                <Text style={s.infoGridText}>Brak dodatkowego{'\n'}sprzętu</Text>
-              </View>
-              <View style={s.infoGridItem}>
-                <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
-                <Text style={s.infoGridText}>Wypłata na konto{'\n'}1-2 dni robocze</Text>
-              </View>
-              <View style={s.infoGridItem}>
-                <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
-                <Text style={s.infoGridText}>Szyfrowanie{'\n'}end-to-end</Text>
-              </View>
-              <View style={s.infoGridItem}>
-                <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
-                <Text style={s.infoGridText}>Zgodność z{'\n'}normą PCI DSS</Text>
-              </View>
-            </View>
+          </>
+        )}
+        {status === 'processing' && (
+          <View style={s.statusPill}>
+            <ActivityIndicator size="small" color={C.primaryLight} style={{ marginRight: 8 }} />
+            <Text style={s.statusPillText}>Oczekiwanie na płatność...</Text>
           </View>
+        )}
+        {status === 'error' && (
+          <>
+            <View style={s.errorPill}>
+              <Text style={s.errorPillText}>{errorMsg}</Text>
+            </View>
+            <TouchableOpacity style={s.retryBtn} onPress={initializeReader}>
+              <Text style={s.retryText}>Spróbuj ponownie</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
 
-
+      {/* Dół — metody płatności */}
+      <View style={s.infoSection}>
+        <View style={s.infoSectionDivider} />
+        <Text style={s.infoSectionLabel}>Akceptowane metody płatności</Text>
+        <View style={s.methodsRow}>
+          {['VISA', 'Mastercard', 'AMEX', 'Apple Pay'].map(m => (
+            <View key={m} style={s.methodChip}>
+              <Text style={s.methodChipText}>{m}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={s.infoGrid}>
+          {[
+            'Brak dodatkowego\nsprzętu',
+            'Wypłata na konto\n1-2 dni robocze',
+            'Szyfrowanie\nend-to-end',
+            'Zgodność z\nnormą PCI DSS',
+          ].map((txt, i) => (
+            <View key={i} style={s.infoGridItem}>
+              <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
+              <Text style={s.infoGridText}>{txt}</Text>
+            </View>
+          ))}
         </View>
       </View>
 
@@ -324,169 +293,94 @@ export default function TapScreen({ navigation, route }: any) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#070511' },
+  root: { flex: 1, backgroundColor: C.bg },
 
   back: {
-    position: 'absolute', top: 60, left: 16, zIndex: 10,
+    marginTop: 8, marginLeft: 16, marginBottom: 4,
     width: 42, height: 42, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: C.card,
+    borderWidth: 1, borderColor: C.cardBorder,
     alignItems: 'center', justifyContent: 'center',
   },
-  backIcon: { color: 'rgba(255,255,255,0.7)', fontSize: 18 },
+  backIcon: { color: C.text2, fontSize: 18 },
 
-  // Górna strefa
-  nfcZone: {
-    height: 255,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    marginTop: -40,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.035)',
-  },
-  particle: {
-    position: 'absolute',
-    backgroundColor: '#5b7cff',
-  },
-  connectRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-  },
-  connectText: { fontSize: 12, color: 'rgba(255,255,255,0.35)' },
-
-  // Karta dolna
-  cardWrapper: {
-    flex: 1,
-    paddingTop: 0,
-  },
-  card: {
-    backgroundColor: 'rgba(255,255,255,0.035)',
+  // Centrum
+  center: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 40,
-    flex: 1,
-    justifyContent: 'space-between',
   },
-
-  // Merchant header
-  merchantRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 24,
-  },
-  merchantInfo: { flex: 1 },
-  merchantName: {
-    fontSize: 17, fontWeight: '700', color: '#ffffff', marginBottom: 4,
-  },
-  verifiedBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-  },
-  verifiedDot: {
-    width: 6, height: 6, borderRadius: 3, backgroundColor: '#34d399',
-  },
-  verifiedText: {
-    fontSize: 12, color: '#34d399', fontWeight: '600',
-  },
+  merchantName: { fontSize: 18, fontWeight: '800', color: C.text1, marginBottom: 6 },
+  verifiedBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 32 },
+  verifiedDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.success },
+  verifiedText: { fontSize: 12, color: C.success, fontWeight: '600' },
 
   // Kwota
-  amountBlock: {
-    marginBottom: 20,
-    alignItems: 'center',
-  },
+  amountBlock: { alignItems: 'center', marginBottom: 24 },
   amountLabel: {
-    fontSize: 12, color: 'rgba(255,255,255,0.35)',
-    fontWeight: '600', letterSpacing: 0.8,
-    textTransform: 'uppercase', marginBottom: 4,
-    textAlign: 'center',
+    fontSize: 10, color: C.text3, fontWeight: '700',
+    letterSpacing: 3, marginBottom: 8,
   },
   amountValue: {
-    fontSize: 58, fontWeight: '900', color: '#ffffff', letterSpacing: -2, lineHeight: 66,
-    textAlign: 'center',
+    fontSize: 72, fontWeight: '900', color: C.text1, letterSpacing: -3, lineHeight: 76,
   },
-  amountCurr: {
-    fontSize: 26, fontWeight: '700', color: 'rgba(255,255,255,0.45)', letterSpacing: 0,
-  },
+  amountCurr: { fontSize: 32, fontWeight: '700', color: C.text2 },
 
   // Status
+  connectRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  connectText: { fontSize: 12, color: C.text3 },
   progressBar: {
-    width: '100%', height: 3, backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 2, overflow: 'hidden', marginBottom: 12,
+    width: '100%', height: 3, backgroundColor: C.cardBorder,
+    borderRadius: 2, overflow: 'hidden', marginBottom: 8,
   },
-  progressFill: { height: '100%', backgroundColor: '#7c3aed', borderRadius: 2 },
+  progressFill: { height: '100%', backgroundColor: C.primary, borderRadius: 2 },
   statusPill: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 12, paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: 'rgba(167,139,250,0.08)',
-    borderWidth: 1, borderColor: 'rgba(167,139,250,0.15)',
-    marginBottom: 12,
+    paddingVertical: 14, paddingHorizontal: 20, borderRadius: 16,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
+    width: '100%',
   },
-  statusPillText: {
-    fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: '500',
-  },
+  statusPillText: { fontSize: 14, color: C.text2, fontWeight: '600' },
   errorPill: {
-    paddingVertical: 12, paddingHorizontal: 16,
-    borderRadius: 14,
+    paddingVertical: 12, paddingHorizontal: 16, borderRadius: 14,
     backgroundColor: 'rgba(248,113,113,0.08)',
     borderWidth: 1, borderColor: 'rgba(248,113,113,0.2)',
-    marginBottom: 12,
+    marginBottom: 12, width: '100%',
   },
-  errorPillText: {
-    fontSize: 13, color: '#f87171', textAlign: 'center', fontWeight: '500',
-  },
+  errorPillText: { fontSize: 13, color: C.error, textAlign: 'center', fontWeight: '500' },
   retryBtn: {
     paddingVertical: 14, borderRadius: 14,
-    backgroundColor: 'rgba(124,58,237,0.2)',
-    borderWidth: 1, borderColor: 'rgba(124,58,237,0.4)',
-    alignItems: 'center', marginBottom: 12,
+    backgroundColor: C.primaryFaint,
+    borderWidth: 1, borderColor: C.cardBorderActive,
+    alignItems: 'center', width: '100%',
   },
-  retryText: { color: '#a78bfa', fontSize: 15, fontWeight: '700' },
+  retryText: { color: C.primaryLight, fontSize: 15, fontWeight: '700' },
 
   // Info section
-  infoSection: {
-    marginTop: 20,
-  },
-  infoSectionDivider: {
-    height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginBottom: 16,
-  },
+  infoSection: { paddingHorizontal: 24, paddingBottom: 24 },
+  infoSectionDivider: { height: 1, backgroundColor: C.cardBorder, marginBottom: 16 },
   infoSectionLabel: {
-    fontSize: 11, color: 'rgba(255,255,255,0.25)',
-    fontWeight: '600', letterSpacing: 0.8,
-    textTransform: 'uppercase', marginBottom: 10,
+    fontSize: 10, color: C.text3, fontWeight: '700',
+    letterSpacing: 2, marginBottom: 10,
   },
-  methodsRow: {
-    flexDirection: 'row', gap: 8, marginBottom: 16,
-  },
+  methodsRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
   methodChip: {
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.cardBorder,
   },
-  methodChipText: {
-    fontSize: 11, color: 'rgba(255,255,255,0.45)',
-    fontWeight: '700', letterSpacing: 0.5,
-  },
-  infoGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
-  },
+  methodChipText: { fontSize: 11, color: C.text3, fontWeight: '700', letterSpacing: 0.5 },
+  infoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   infoGridItem: {
-    width: '47%',
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    width: '47%', flexDirection: 'row', alignItems: 'flex-start', gap: 8,
     paddingVertical: 10, paddingHorizontal: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: C.card, borderRadius: 12,
+    borderWidth: 1, borderColor: C.cardBorder,
   },
   infoGridIcon: {
     width: 18, height: 18, borderRadius: 9,
-    backgroundColor: 'rgba(52,211,153,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginTop: 1,
+    backgroundColor: C.successFaint,
+    alignItems: 'center', justifyContent: 'center', marginTop: 1,
   },
-  infoGridIconText: {
-    fontSize: 10, color: '#34d399', fontWeight: '800',
-  },
-  infoGridText: {
-    fontSize: 11, color: 'rgba(255,255,255,0.35)',
-    fontWeight: '500', lineHeight: 16, flex: 1,
-  },
+  infoGridIconText: { fontSize: 10, color: C.success, fontWeight: '800' },
+  infoGridText: { fontSize: 11, color: C.text3, fontWeight: '500', lineHeight: 16, flex: 1 },
 
 });
