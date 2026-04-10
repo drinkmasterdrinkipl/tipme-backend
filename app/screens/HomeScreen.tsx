@@ -141,7 +141,7 @@ export default function HomeScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  scroll: { paddingBottom: 40 },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingBottom: 16 },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8,
