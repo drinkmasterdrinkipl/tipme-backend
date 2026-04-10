@@ -48,7 +48,7 @@ const SLIDES = [
   {
     icon: '⚙️',
     title: 'Ustawienia i pomoc',
-    desc: 'W zakładce Ustawienia znajdziesz opcje konta, historię i pomoc dotyczącą Tap to Pay.',
+    desc: 'W zakładce Ustawienia znajdziesz opcje konta i zarządzanie Tap to Pay.',
     tip: 'Możesz w każdej chwili włączyć lub wyłączyć Tap to Pay z poziomu ustawień.',
   },
 ];
