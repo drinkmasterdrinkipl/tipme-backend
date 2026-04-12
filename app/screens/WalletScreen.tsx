@@ -10,26 +10,18 @@ import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
-const DEMO_MODE = false; // NIGDY nie ustawiaj na true w produkcji — pokazuje fałszywe dane
-const DEMO_PAYOUTS = [
-  { id: 'po_1', amount: 320, currency: 'pln', arrival_date: Date.now()/1000 - 86400, status: 'paid' },
-  { id: 'po_2', amount: 185, currency: 'pln', arrival_date: Date.now()/1000 - 86400*7, status: 'paid' },
-  { id: 'po_3', amount: 240, currency: 'pln', arrival_date: Date.now()/1000 - 86400*14, status: 'paid' },
-];
-
 export default function WalletScreen() {
   const navigation = useNavigation<any>();
-  const [available, setAvailable] = useState<number | null>(DEMO_MODE ? 160 : null);
-  const [pending, setPending] = useState<number | null>(DEMO_MODE ? 45 : null);
-  const [loading, setLoading] = useState(!DEMO_MODE);
+  const [available, setAvailable] = useState<number | null>(null);
+  const [pending, setPending] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
   const [payoutLoading, setPayoutLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [payouts, setPayouts] = useState<any[]>(DEMO_MODE ? DEMO_PAYOUTS : []);
+  const [payouts, setPayouts] = useState<any[]>([]);
   const [loadError, setLoadError] = useState('');
   const mountedRef = useRef(true);
 
   const loadBalance = useCallback(async () => {
-    if (DEMO_MODE) return;
     setLoadError('');
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');

@@ -7,16 +7,6 @@ import { C } from '../theme';
 import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
 const PAGE_SIZE = 15;
-const DEMO_MODE = false; // NIGDY nie ustawiaj na true w produkcji — pokazuje fałszywe dane
-
-const today = new Date().toISOString();
-const yesterday = new Date(Date.now() - 86400000).toISOString();
-const DEMO_TRANSACTIONS = [
-  { id: '1', amount: 20, paymentMethod: 'Visa', created: today, status: 'succeeded' },
-  { id: '2', amount: 15, paymentMethod: 'Mastercard', created: today, status: 'succeeded' },
-  { id: '3', amount: 30, paymentMethod: 'Apple Pay', created: yesterday, status: 'succeeded' },
-  { id: '4', amount: 10, paymentMethod: 'Visa', created: yesterday, status: 'succeeded' },
-];
 
 interface Transaction { id: string; amount: number; paymentMethod: string; created: string; status: string; }
 type ListItem = { type: 'header'; label: string } | { type: 'tx' } & Transaction;
@@ -59,9 +49,9 @@ function groupByDay(txs: Transaction[]): ListItem[] {
 }
 
 export default function HistoryScreen() {
-  const [transactions, setTransactions] = useState<Transaction[]>(DEMO_MODE ? DEMO_TRANSACTIONS : []);
-  const [loading, setLoading] = useState(!DEMO_MODE);
-  const [todayTotal, setTodayTotal] = useState(DEMO_MODE ? 35 : 0);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [todayTotal, setTodayTotal] = useState(0);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const mountedRef = useRef(true);
@@ -89,10 +79,10 @@ export default function HistoryScreen() {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (!DEMO_MODE) loadTransactions();
+    loadTransactions();
     return () => { mountedRef.current = false; };
   }, [loadTransactions]);
-  useRefreshOnNewDay(useCallback(() => { if (!DEMO_MODE) loadTransactions(); }, [loadTransactions]));
+  useRefreshOnNewDay(useCallback(() => { loadTransactions(); }, [loadTransactions]));
 
   const totalPages = Math.max(1, Math.ceil(transactions.length / PAGE_SIZE));
   const pageTxs = useMemo(

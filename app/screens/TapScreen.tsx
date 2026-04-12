@@ -10,8 +10,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
-const SIMULATED = false;
-
 export default function TapScreen({ navigation, route }: any) {
   const amount: number = route.params?.amount ?? 0;
   const amountZl = (amount / 100 % 1 === 0)
@@ -58,16 +56,6 @@ export default function TapScreen({ navigation, route }: any) {
     try {
       setStatus('processing');
       statusRef.current = 'processing'; // bezpośrednia synchronizacja — useEffect jest asynchroniczny
-
-      if (SIMULATED) {
-        await new Promise(r => setTimeout(r, 2500));
-        navigation.replace('Success', {
-          amount: amountZl,
-          paymentMethod: 'Visa',
-          last4: '4242',
-        });
-        return;
-      }
 
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
@@ -172,22 +160,6 @@ export default function TapScreen({ navigation, route }: any) {
         if (major < 17 || (major === 17 && (minor ?? 0) < 6)) {
           throw new Error('osVersionNotSupported');
         }
-      }
-
-      if (SIMULATED) {
-        setInitStep('Szukanie czytnika...');
-        setInitProgress(35);
-        await new Promise(r => setTimeout(r, 800));
-        setInitStep('Wykrywanie urządzenia...');
-        setInitProgress(60);
-        await new Promise(r => setTimeout(r, 600));
-        setInitStep('Łączenie...');
-        setInitProgress(80);
-        await new Promise(r => setTimeout(r, 600));
-        setInitProgress(100);
-        await new Promise(r => setTimeout(r, 300));
-        setStatus('ready');
-        return;
       }
 
       // Jeśli warmup z HomeScreen już odkrył czytnik — pomiń discovery (szybsza inicjalizacja)

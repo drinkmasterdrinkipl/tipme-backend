@@ -31,7 +31,7 @@ async function findStripeAccountByEmail(email) {
     startingAfter = batch.data[batch.data.length - 1].id;
   }
 }
-const JWT_EXPIRES = '365d';
+const JWT_EXPIRES = '30d';
 
 function createToken(accountId, email) {
   return jwt.sign({ accountId, email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
@@ -125,13 +125,9 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) =
   }
   switch (event.type) {
     case 'payment_intent.succeeded':
-      console.log('✅ Napiwek przyjęty:', event.data.object.amount / 100, 'zł');
-      break;
     case 'account.updated':
-      console.log('👤 Konto zaktualizowane:', event.data.object.id);
-      break;
     default:
-      console.log('Event:', event.type);
+      break;
   }
   res.json({ received: true });
 });

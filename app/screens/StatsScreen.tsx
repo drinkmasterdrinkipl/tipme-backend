@@ -82,32 +82,16 @@ function Calendar({ selected, onSelect }: { selected: string; onSelect: (d: stri
   );
 }
 
-const DEMO_MODE = false; // NIGDY nie ustawiaj na true w produkcji — pokazuje fałszywe dane
-const DEMO_STATS = {
-  today: { total: 160, count: 7, avg: 22.86 },
-  week:  { total: 745, count: 34, avg: 21.91 },
-  month: { total: 2840, count: 127, avg: 22.36 },
-  byDay: [
-    { date: todayStr(), total: 160, count: 7 },
-    { date: toDateStr(new Date(Date.now()-86400000)), total: 95, count: 4 },
-    { date: toDateStr(new Date(Date.now()-86400000*2)), total: 130, count: 6 },
-    { date: toDateStr(new Date(Date.now()-86400000*3)), total: 80, count: 3 },
-    { date: toDateStr(new Date(Date.now()-86400000*4)), total: 110, count: 5 },
-    { date: toDateStr(new Date(Date.now()-86400000*5)), total: 90, count: 4 },
-    { date: toDateStr(new Date(Date.now()-86400000*6)), total: 80, count: 5 },
-  ],
-};
 
 // ─── Main Screen ─────────────────────────────────────────
 export default function StatsScreen() {
   const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [stats, setStats]   = useState<any>(DEMO_MODE ? DEMO_STATS : null);
-  const [loading, setLoading] = useState(!DEMO_MODE);
+  const [stats, setStats]   = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const mountedRef = useRef(true);
 
   const loadStats = useCallback(async (date: string) => {
-    if (DEMO_MODE) return;
     if (mountedRef.current) { setLoading(true); setError(''); }
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
