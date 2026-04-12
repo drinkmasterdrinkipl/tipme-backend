@@ -811,10 +811,15 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
       return res.json({ url: accountLink.url, requiresOnboarding: true });
     }
 
-    // Express accounts — generujemy jednorazowy login link do Express Dashboard
-    // (kelner widzi wypłaty, konto bankowe, historię, dane podatkowe)
-    const loginLink = await stripe.accounts.createLoginLink(accountId);
-    res.json({ url: loginLink.url });
+    // Próbujemy createLoginLink (działa dla Express dashboard)
+    // Jeśli konto ma dashboard: full (Standard-like), używamy głównego dashboardu Stripe
+    try {
+      const loginLink = await stripe.accounts.createLoginLink(accountId);
+      return res.json({ url: loginLink.url });
+    } catch {
+      // dashboard: full — kelner loguje się bezpośrednio na stripe.com
+      return res.json({ url: 'https://dashboard.stripe.com/login' });
+    }
   } catch (error) {
     console.error('Dashboard link error:', error.message);
     res.status(500).json({ error: safeError(error) });
