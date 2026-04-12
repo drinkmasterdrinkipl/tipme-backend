@@ -51,7 +51,7 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
           <View style={s.iconWrap}>
             <Text style={s.icon}>⬡</Text>
           </View>
-          <Text style={s.title}>Tap to Pay{'\n'}on iPhone</Text>
+          <Text style={s.title}>Tap to Pay{'\n'}na iPhonie</Text>
           <Text style={s.sub}>
             Przyjmuj płatności zbliżeniowe bezpośrednio swoim iPhonem — bez dodatkowego terminala.
           </Text>
@@ -77,7 +77,7 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
         <View style={s.termsBox}>
           <Text style={s.termsTitle}>Warunki korzystania z Tap to Pay</Text>
           <Text style={s.termsText}>
-            Korzystanie z Tap to Pay on iPhone podlega Warunkom usług Apple oraz Stripe.
+            Korzystanie z Tap to Pay na iPhonie podlega Warunkom usług Apple oraz Stripe.
             Akceptując, zgadzasz się na przetwarzanie danych transakcji przez Apple i Stripe
             zgodnie z ich politykami prywatności.
           </Text>
@@ -91,7 +91,7 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
               {accepted && <Text style={s.checkmark}>✓</Text>}
             </View>
             <Text style={s.checkLabel}>
-              Akceptuję Warunki korzystania z Tap to Pay on iPhone
+              Akceptuję Warunki korzystania z Tap to Pay na iPhonie
             </Text>
           </TouchableOpacity>
         </View>

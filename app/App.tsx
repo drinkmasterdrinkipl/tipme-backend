@@ -13,6 +13,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StripeTerminalProvider, useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from './config';
+import { useTapToPayNotification } from './hooks/useTapToPayNotification';
 
 import HomeScreen from './screens/HomeScreen';
 import TapScreen from './screens/TapScreen';
@@ -106,6 +107,9 @@ function MainTabs() {
 export default function App() {
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
+
+  // Wymaganie Apple 3.3 + 6.3: push notification o Tap to Pay na iPhonie (wysyłany raz)
+  useTapToPayNotification(isOnboarded === true);
   const navigationRef = useRef<any>(null);
   const welcomeNavigatedRef = useRef(false);
 

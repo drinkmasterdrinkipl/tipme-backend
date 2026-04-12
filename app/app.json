@@ -35,7 +35,15 @@
     "plugins": [
       "expo-asset",
       "expo-font",
-      "@stripe/stripe-terminal-react-native"
+      "@stripe/stripe-terminal-react-native",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#a855f7",
+          "sounds": []
+        }
+      ]
     ],
     "extra": {
       "eas": {

@@ -48,7 +48,7 @@ export default function SettingsScreen({ navigation }: any) {
     } else {
       Alert.alert(
         'Wyłącz Tap to Pay',
-        'Czy na pewno chcesz wyłączyć Tap to Pay on iPhone? Nie będziesz mógł przyjmować płatności zbliżeniowych.',
+        'Czy na pewno chcesz wyłączyć Tap to Pay na iPhonie? Nie będziesz mógł przyjmować płatności zbliżeniowych.',
         [
           { text: 'Anuluj', style: 'cancel' },
           {
