@@ -17,19 +17,29 @@ if (!process.env.JWT_SECRET) {
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme-set-JWT_SECRET-on-render';
 
 // Szuka konta Stripe po emailu z obsługą paginacji (> 100 kont)
-async function findStripeAccountByEmail(email) {
+// Zwraca WSZYSTKIE konta z danym emailem
+async function findAllStripeAccountsByEmail(email) {
   const normalizedEmail = email.toLowerCase().trim();
+  const results = [];
   let startingAfter = undefined;
   while (true) {
     const batch = await stripe.accounts.list({
       limit: 100,
       ...(startingAfter && { starting_after: startingAfter }),
     });
-    const found = batch.data.find(a => a.email === normalizedEmail);
-    if (found) return found;
-    if (!batch.has_more) return null;
+    for (const a of batch.data) {
+      if (a.email === normalizedEmail) results.push(a);
+    }
+    if (!batch.has_more) break;
     startingAfter = batch.data[batch.data.length - 1].id;
   }
+  return results;
+}
+
+// Zachowane dla kompatybilności — zwraca pierwsze konto (używane przy rejestracji)
+async function findStripeAccountByEmail(email) {
+  const all = await findAllStripeAccountsByEmail(email);
+  return all[0] || null;
 }
 const JWT_EXPIRES = '30d';
 
@@ -261,24 +271,47 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Nieprawidłowy adres email' });
     }
 
-    // Znajdź konto po emailu z paginacją — nie pomija kont gdy jest ich > 100
-    const match = await findStripeAccountByEmail(email);
-    if (!match) {
+    // Znajdź wszystkie konta z tym emailem
+    const accounts = await findAllStripeAccountsByEmail(email);
+    if (!accounts.length) {
       return res.status(404).json({ error: 'Nie znaleziono konta dla tego emaila' });
     }
 
-    // Weryfikuj hasło
-    const hash = match.metadata?.password_hash;
-    if (!hash) {
-      // Konto założone przed wprowadzeniem auth — pozwól ustawić hasło
+    // Sprawdź hasło dla każdego konta — znajdź to gdzie pasuje
+    // Preferuj: charges_enabled > details_submitted > reszta
+    const sorted = accounts.sort((a, b) => {
+      if (a.charges_enabled && !b.charges_enabled) return -1;
+      if (!a.charges_enabled && b.charges_enabled) return 1;
+      if (a.details_submitted && !b.details_submitted) return -1;
+      if (!a.details_submitted && b.details_submitted) return 1;
+      return 0;
+    });
+
+    let match = null;
+    let needsPassword = false;
+
+    for (const account of sorted) {
+      const hash = account.metadata?.password_hash;
+      if (!hash) {
+        if (!match) needsPassword = true;
+        continue;
+      }
+      const valid = await bcrypt.compare(password, hash);
+      if (valid) {
+        match = account;
+        needsPassword = false;
+        break;
+      }
+    }
+
+    if (!match && needsPassword) {
       return res.status(403).json({
         error: 'Konto wymaga ustawienia hasła.',
         needsPassword: true,
-        accountId: match.id,
+        accountId: sorted[0].id,
       });
     }
-    const valid = await bcrypt.compare(password, hash);
-    if (!valid) {
+    if (!match) {
       return res.status(401).json({ error: 'Nieprawidłowe hasło' });
     }
 
