@@ -10,7 +10,27 @@ const nodemailer = require('nodemailer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET nie jest ustawiony — ustaw zmienną środowiskową na Render.com');
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+}
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme-set-JWT_SECRET-on-render';
+
+// Szuka konta Stripe po emailu z obsługą paginacji (> 100 kont)
+async function findStripeAccountByEmail(email) {
+  const normalizedEmail = email.toLowerCase().trim();
+  let startingAfter = undefined;
+  while (true) {
+    const batch = await stripe.accounts.list({
+      limit: 100,
+      ...(startingAfter && { starting_after: startingAfter }),
+    });
+    const found = batch.data.find(a => a.email === normalizedEmail);
+    if (found) return found;
+    if (!batch.has_more) return null;
+    startingAfter = batch.data[batch.data.length - 1].id;
+  }
+}
 const JWT_EXPIRES = '365d';
 
 function createToken(accountId, email) {
@@ -29,10 +49,32 @@ function authenticateToken(req, res, next) {
   }
 }
 
+function validateAccountId(id) {
+  return typeof id === 'string' && id.startsWith('acct_') && id.length < 50;
+}
+
+// W produkcji nie ujawniamy szczegółów błędów Stripe/wewnętrznych
+function safeError(error) {
+  if (process.env.NODE_ENV === 'production') return 'Błąd serwera — spróbuj ponownie';
+  return error.message;
+}
+
+function requireOwnership(req, res, next) {
+  const id = req.params.accountId || req.body.stripeAccountId;
+  if (!validateAccountId(id)) {
+    return res.status(400).json({ error: 'Nieprawidłowe ID konta' });
+  }
+  if (req.user.accountId !== id) {
+    return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
+  }
+  next();
+}
+
 const mailer = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: 587,
   secure: false,
+  tls: { rejectUnauthorized: false },
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -61,6 +103,15 @@ app.use('/api/', limiter);
 const accountLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10 });
 app.use('/api/create-connected-account', accountLimiter);
 
+// Limit na logowanie — zapobiega brute-force atakowi na hasła
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: 'Za dużo prób logowania. Poczekaj 15 minut.' } });
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/set-password', loginLimiter);
+
+// Limit na wysyłanie emaili — zapobiega spamowaniu przez skompromitowany token
+const receiptLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, message: { error: 'Zbyt wiele potwierdzeń. Poczekaj godzinę.' } });
+app.use('/api/send-receipt', receiptLimiter);
+
 // Webhook musi mieć raw body PRZED express.json()
 app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -86,6 +137,9 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) =
 });
 
 app.use(express.json());
+
+// Health check przed API key — UptimeRobot nie wysyła X-Api-Key
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ============================================
 // SECURITY — weryfikacja API key
@@ -119,30 +173,19 @@ app.post('/api/create-connected-account', async (req, res) => {
   try {
     const { email, firstName, lastName, password } = req.body;
 
-    if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 254) {
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
       return res.status(400).json({ error: 'Nieprawidłowy adres email' });
     }
     if (!password || password.length < 8) {
       return res.status(400).json({ error: 'Hasło musi mieć minimum 8 znaków' });
     }
 
-    // Sprawdź czy konto z tym emailem już istnieje
-    const existing = await stripe.accounts.list({ limit: 100 });
-    const found = existing.data.find(a => a.email === email.toLowerCase().trim()) || null;
+    // Sprawdź czy konto z tym emailem już istnieje — odrzuć KAŻDE (nie tylko charges_enabled)
+    const found = await findStripeAccountByEmail(email);
     if (found) {
-      if (found.charges_enabled) {
-        return res.status(409).json({
-          error: 'Konto z tym emailem już istnieje. Użyj opcji "Mam już konto — zaloguj się".',
-        });
-      }
-      // Konto istnieje ale onboarding nie dokończony — wygeneruj nowy link
-      const accountLink = await stripe.accountLinks.create({
-        account: found.id,
-        refresh_url: `${process.env.APP_URL}/stripe/refresh`,
-        return_url: `${process.env.APP_URL}/stripe/success`,
-        type: 'account_onboarding',
+      return res.status(409).json({
+        error: 'Konto z tym emailem już istnieje. Użyj opcji "Mam już konto — zaloguj się".',
       });
-      return res.json({ accountId: found.id, onboardingUrl: accountLink.url });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -189,7 +232,7 @@ app.post('/api/create-connected-account', async (req, res) => {
     });
   } catch (error) {
     console.error('Create account error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -205,19 +248,15 @@ app.post('/api/auth/login', async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ error: 'Podaj email i hasło' });
     }
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return res.status(400).json({ error: 'Nieprawidłowy adres email' });
+    }
 
-    // Znajdź konto po emailu — preferuj konta z charges_enabled i password_hash
-    const accounts = await stripe.accounts.list({ limit: 100 });
-    const allMatches = accounts.data.filter(a => a.email === email.toLowerCase().trim());
-    if (!allMatches.length) {
+    // Znajdź konto po emailu z paginacją — nie pomija kont gdy jest ich > 100
+    const match = await findStripeAccountByEmail(email);
+    if (!match) {
       return res.status(404).json({ error: 'Nie znaleziono konta dla tego emaila' });
     }
-    // Priorytet: enabled z hasłem > enabled bez hasła > z hasłem > pierwsze
-    const match =
-      allMatches.find(a => a.charges_enabled && a.metadata?.password_hash) ||
-      allMatches.find(a => a.charges_enabled) ||
-      allMatches.find(a => a.metadata?.password_hash) ||
-      allMatches[0];
 
     // Weryfikuj hasło
     const hash = match.metadata?.password_hash;
@@ -243,62 +282,33 @@ app.post('/api/auth/login', async (req, res) => {
       token,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
-// ============================================
-// CLEANUP — Usuń wszystkie Restricted (nieaktywne) konta
-// Aktualizacja business_profile dla istniejącego konta
-// ============================================
-app.post('/api/update-business-profile/:accountId', async (req, res) => {
-  try {
-    const { accountId } = req.params;
-    await stripe.accounts.update(accountId, {
-      business_profile: {
-        name: 'Tip For Me',
-        url: 'https://tipme.drinki.pl',
-      },
-    });
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Jednorazowy endpoint — wywołaj raz, potem możesz go usunąć
-// ============================================
-app.delete('/api/cleanup-restricted-accounts', async (req, res) => {
-  try {
-    const accounts = await stripe.accounts.list({ limit: 100 });
-    const restricted = accounts.data.filter(a => !a.charges_enabled);
-    const deleted = [];
-    const errors = [];
-    for (const acc of restricted) {
-      try {
-        await stripe.accounts.del(acc.id);
-        deleted.push(acc.id);
-      } catch (e) {
-        errors.push({ id: acc.id, error: e.message });
-      }
-    }
-    res.json({ deleted, errors, total: deleted.length });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// Endpointy administracyjne (update-business-profile, cleanup-restricted-accounts)
+// zostały usunięte — były bez autentykacji i nie są potrzebne w produkcji
 
 // ============================================
 // AUTH — Ustawienie hasła dla kont bez hasła (migracja)
 // ============================================
 app.post('/api/auth/set-password', async (req, res) => {
   try {
-    const { accountId, password } = req.body;
-    if (!accountId || !password || password.length < 8) {
+    const { accountId, email, password } = req.body;
+    if (!accountId || !email || !password || password.length < 8) {
       return res.status(400).json({ error: 'Hasło musi mieć minimum 8 znaków' });
+    }
+    if (!validateAccountId(accountId)) {
+      return res.status(400).json({ error: 'Nieprawidłowe ID konta' });
     }
 
     const account = await stripe.accounts.retrieve(accountId);
+
+    // Weryfikuj że email zgadza się z kontem — zapobiega ustawieniu hasła na cudzym koncie
+    if (!account.email || account.email.toLowerCase() !== email.toLowerCase().trim()) {
+      return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
+    }
+
     if (account.metadata?.password_hash) {
       return res.status(409).json({ error: 'Konto ma już ustawione hasło. Użyj logowania.' });
     }
@@ -313,7 +323,7 @@ app.post('/api/auth/set-password', async (req, res) => {
       token,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -324,6 +334,9 @@ app.post('/api/auth/set-password', async (req, res) => {
 app.get('/api/account-status/:accountId', async (req, res) => {
   try {
     const { accountId } = req.params;
+    if (!validateAccountId(accountId)) {
+      return res.status(400).json({ error: 'Nieprawidłowe ID konta' });
+    }
     const account = await stripe.accounts.retrieve(accountId, {
       expand: ['capabilities'],
     });
@@ -343,7 +356,12 @@ app.get('/api/account-status/:accountId', async (req, res) => {
       });
     }
 
-    const token = account.charges_enabled ? createToken(account.id, account.email) : null;
+    // Token tylko jeśli konto aktywne I ma ustawione hasło przez naszą aplikację.
+    // Zapobiega uzyskaniu tokenu przez kogoś kto zna tylko acct_ ID.
+    const hasPassword = !!account.metadata?.password_hash;
+    const token = (account.charges_enabled && hasPassword)
+      ? createToken(account.id, account.email)
+      : null;
 
     res.json({
       chargesEnabled: account.charges_enabled,
@@ -353,7 +371,7 @@ app.get('/api/account-status/:accountId', async (req, res) => {
       token,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -361,12 +379,15 @@ app.get('/api/account-status/:accountId', async (req, res) => {
 // 3a. LOCATION — tworzenie lokalizacji dla Stripe Terminal
 // Wymagane przed pierwszym użyciem Tap to Pay
 // ============================================
-app.post('/api/create-location', async (req, res) => {
+app.post('/api/create-location', authenticateToken, async (req, res) => {
   try {
     const { stripeAccountId, displayName } = req.body;
 
-    if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
+    if (!validateAccountId(stripeAccountId)) {
       return res.status(400).json({ error: 'Nieprawidłowe ID konta Stripe' });
+    }
+    if (req.user.accountId !== stripeAccountId) {
+      return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
     }
     const safeName = (typeof displayName === 'string' && displayName.trim().length > 0)
       ? displayName.trim().slice(0, 100)
@@ -388,7 +409,7 @@ app.post('/api/create-location', async (req, res) => {
     res.json({ locationId: location.id });
   } catch (error) {
     console.error('Create location error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -397,9 +418,15 @@ app.post('/api/create-location', async (req, res) => {
 // Aplikacja mobilna potrzebuje tego tokenu
 // aby połączyć się z Tap to Pay
 // ============================================
-app.post('/api/connection-token', async (req, res) => {
+app.post('/api/connection-token', authenticateToken, async (req, res) => {
   try {
     const { stripeAccountId } = req.body;
+    if (!validateAccountId(stripeAccountId)) {
+      return res.status(400).json({ error: 'Nieprawidłowe ID konta Stripe' });
+    }
+    if (req.user.accountId !== stripeAccountId) {
+      return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
+    }
 
     const token = await stripe.terminal.connectionTokens.create(
       {},
@@ -409,7 +436,7 @@ app.post('/api/connection-token', async (req, res) => {
     res.json({ secret: token.secret });
   } catch (error) {
     console.error('Connection token error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -417,7 +444,7 @@ app.post('/api/connection-token', async (req, res) => {
 // 4. PAYMENT INTENT — Tworzenie płatności
 // Z automatyczną prowizją dla platformy
 // ============================================
-app.post('/api/create-payment-intent', async (req, res) => {
+app.post('/api/create-payment-intent', authenticateToken, async (req, res) => {
   try {
     const { amount, stripeAccountId } = req.body;
 
@@ -426,6 +453,10 @@ app.post('/api/create-payment-intent', async (req, res) => {
     }
     if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
       return res.status(400).json({ error: 'Nieprawidłowe ID konta Stripe' });
+    }
+    // Weryfikacja: użytkownik może tworzyć płatności tylko na swoim koncie
+    if (req.user.accountId !== stripeAccountId) {
+      return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
     }
 
     // amount w groszach (np. 2000 = 20 zł)
@@ -456,7 +487,31 @@ app.post('/api/create-payment-intent', async (req, res) => {
     });
   } catch (error) {
     console.error('Payment intent error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+// ============================================
+// 4b. ANULOWANIE PAYMENT INTENT
+// Wywoływane gdy użytkownik wychodzi z TapScreen
+// ============================================
+app.post('/api/cancel-payment-intent', authenticateToken, async (req, res) => {
+  try {
+    const { paymentIntentId, stripeAccountId } = req.body;
+    if (!paymentIntentId || !stripeAccountId) {
+      return res.status(400).json({ error: 'Brak paymentIntentId lub stripeAccountId' });
+    }
+    if (!validateAccountId(stripeAccountId)) {
+      return res.status(400).json({ error: 'Nieprawidłowe ID konta' });
+    }
+    if (req.user.accountId !== stripeAccountId) {
+      return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
+    }
+    await stripe.paymentIntents.cancel(paymentIntentId, {}, { stripeAccount: stripeAccountId });
+    res.json({ canceled: true });
+  } catch (error) {
+    // Jeśli PI jest już w stanie którego nie można anulować — ignoruj cicho
+    res.json({ canceled: false, reason: error.message });
   }
 });
 
@@ -464,7 +519,7 @@ app.post('/api/create-payment-intent', async (req, res) => {
 // 5. HISTORIA TRANSAKCJI
 // Pobiera ostatnie napiwki użytkownika
 // ============================================
-app.get('/api/transactions/:accountId', async (req, res) => {
+app.get('/api/transactions/:accountId', authenticateToken, requireOwnership, async (req, res) => {
   try {
     const { accountId } = req.params;
     const rawLimit = parseInt(req.query.limit) || 20;
@@ -475,7 +530,7 @@ app.get('/api/transactions/:accountId', async (req, res) => {
       { stripeAccount: accountId }
     );
 
-    const transactions = charges.data.map((charge) => ({
+    const transactions = charges.data.filter(c => c.status === 'succeeded').map((charge) => ({
       id: charge.id,
       amount: charge.amount / 100, // grosze → złotówki
       currency: charge.currency,
@@ -488,7 +543,7 @@ app.get('/api/transactions/:accountId', async (req, res) => {
 
     res.json({ transactions });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -542,20 +597,33 @@ function getPLOffset(date) {
 // ============================================
 // 6. STATYSTYKI — z obsługą daty i strefy PL
 // ============================================
-app.get('/api/stats/:accountId', async (req, res) => {
+app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req, res) => {
   try {
     const { accountId } = req.params;
     const { date } = req.query;
 
+    // Walidacja formatu daty — tylko YYYY-MM-DD
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'Nieprawidłowy format daty (oczekiwano YYYY-MM-DD)' });
+    }
+
     const bounds = getPolandDayBounds(date || null);
 
     // balance_transactions zawierają dokładne opłaty pobrane przez Stripe
-    const txns = await stripe.balanceTransactions.list(
-      { created: bounds, limit: 100 },
-      { stripeAccount: accountId }
-    );
+    // Paginacja — pobieramy wszystkie transakcje z danego dnia (może być > 100)
+    const allTxns = [];
+    let startingAfter;
+    while (true) {
+      const batch = await stripe.balanceTransactions.list(
+        { created: bounds, limit: 100, ...(startingAfter && { starting_after: startingAfter }) },
+        { stripeAccount: accountId }
+      );
+      allTxns.push(...batch.data);
+      if (!batch.has_more) break;
+      startingAfter = batch.data[batch.data.length - 1].id;
+    }
 
-    const successful = txns.data.filter((t) =>
+    const successful = allTxns.filter((t) =>
       (t.status === 'available' || t.status === 'pending') &&
       (t.type === 'payment' || t.type === 'charge') &&
       t.amount > 0
@@ -582,21 +650,43 @@ app.get('/api/stats/:accountId', async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
 // ============================================
 // 7. PARAGON EMAILEM — potwierdzenie dla klienta
 // ============================================
-app.post('/api/send-receipt', async (req, res) => {
+const escapeHtml = (str) => String(str)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+app.post('/api/send-receipt', authenticateToken, async (req, res) => {
   try {
     const { email, amount, last4, paymentMethod, date } = req.body;
 
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return res.status(400).json({ error: 'Nieprawidłowy adres email' });
+    }
+    if (typeof amount !== 'string' && (isNaN(Number(amount)) || Number(amount) < 0)) {
+      return res.status(400).json({ error: 'Nieprawidłowa kwota' });
+    }
+    if (!last4 || typeof last4 !== 'string' || !/^(\d{4}|\*{4})$/.test(last4)) {
+      return res.status(400).json({ error: 'Nieprawidłowy numer karty' });
+    }
+    if (!paymentMethod || typeof paymentMethod !== 'string' || paymentMethod.length > 100) {
+      return res.status(400).json({ error: 'Nieprawidłowa metoda płatności' });
+    }
+
+    const safeAmount = escapeHtml(amount);
+    const safeLast4 = escapeHtml(last4);
+    const safeMethod = escapeHtml(paymentMethod);
+    const safeDate = escapeHtml(date || '');
+
     await mailer.sendMail({
       from: `"Tip For Me" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: `Potwierdzenie napiwku — ${amount} zł`,
+      to: email.trim(),
+      subject: `Potwierdzenie napiwku — ${safeAmount} zł`,
       html: `
         <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0c0a13;color:#f3f0ff;padding:40px 32px;border-radius:20px;">
           <div style="text-align:center;margin-bottom:32px;">
@@ -606,15 +696,15 @@ app.post('/api/send-receipt', async (req, res) => {
           <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(149,76,233,0.2);border-radius:16px;padding:24px;margin-bottom:24px;">
             <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
               <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">KWOTA</span>
-              <span style="font-size:24px;font-weight:900;color:#10B981;">${amount} zł</span>
+              <span style="font-size:24px;font-weight:900;color:#10B981;">${safeAmount} zł</span>
             </div>
             <div style="border-top:1px solid rgba(149,76,233,0.15);padding-top:16px;display:flex;justify-content:space-between;">
               <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">KARTA</span>
-              <span style="color:#A78BFA;font-weight:600;">${paymentMethod} ••${last4}</span>
+              <span style="color:#A78BFA;font-weight:600;">${safeMethod} ••${safeLast4}</span>
             </div>
             <div style="border-top:1px solid rgba(149,76,233,0.15);padding-top:16px;margin-top:16px;display:flex;justify-content:space-between;">
               <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">DATA</span>
-              <span style="color:#A78BFA;font-weight:600;">${date}</span>
+              <span style="color:#A78BFA;font-weight:600;">${safeDate}</span>
             </div>
           </div>
           <p style="color:#6B7280;font-size:12px;text-align:center;line-height:20px;">
@@ -628,14 +718,14 @@ app.post('/api/send-receipt', async (req, res) => {
     res.json({ sent: true });
   } catch (error) {
     console.error('Email error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
 // ============================================
 // 8. SALDO KONTA — ile jest dostępne do wypłaty
 // ============================================
-app.get('/api/balance/:accountId', async (req, res) => {
+app.get('/api/balance/:accountId', authenticateToken, requireOwnership, async (req, res) => {
   try {
     const balance = await stripe.balance.retrieve(
       {},
@@ -650,14 +740,14 @@ app.get('/api/balance/:accountId', async (req, res) => {
       pending: (pending?.amount || 0) / 100,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
 // ============================================
 // 7a. SZCZEGÓŁY KONTA KELNERA
 // ============================================
-app.get('/api/account-details/:accountId', async (req, res) => {
+app.get('/api/account-details/:accountId', authenticateToken, requireOwnership, async (req, res) => {
   try {
     const account = await stripe.accounts.retrieve(req.params.accountId);
     const bankAccount = account.external_accounts?.data?.[0];
@@ -674,14 +764,14 @@ app.get('/api/account-details/:accountId', async (req, res) => {
       } : null,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
 // ============================================
 // 7b. HISTORIA WYPŁAT
 // ============================================
-app.get('/api/payouts/:accountId', async (req, res) => {
+app.get('/api/payouts/:accountId', authenticateToken, requireOwnership, async (req, res) => {
   try {
     const payouts = await stripe.payouts.list(
       { limit: 20 },
@@ -692,19 +782,19 @@ app.get('/api/payouts/:accountId', async (req, res) => {
         id: p.id,
         amount: p.amount / 100,
         status: p.status,
-        arrivalDate: new Date(p.arrival_date * 1000).toISOString(),
-        created: new Date(p.created * 1000).toISOString(),
+        arrivalDate: p.arrival_date, // Unix timestamp — klient mnoży przez 1000
+        created: p.created,
       })),
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
 // ============================================
 // 8. LINK DO STRIPE DASHBOARD — zarządzanie kontem
 // ============================================
-app.get('/api/dashboard-link/:accountId', async (req, res) => {
+app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, async (req, res) => {
   try {
     const accountId = req.params.accountId;
     const account = await stripe.accounts.retrieve(accountId);
@@ -725,7 +815,7 @@ app.get('/api/dashboard-link/:accountId', async (req, res) => {
     res.json({ url: 'https://dashboard.stripe.com/' });
   } catch (error) {
     console.error('Dashboard link error:', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
@@ -733,7 +823,7 @@ app.get('/api/dashboard-link/:accountId', async (req, res) => {
 // 9. WYPŁATA NA KONTO BANKOWE
 // Wysyła dostępne środki na konto bankowe użytkownika
 // ============================================
-app.post('/api/payout/:accountId', async (req, res) => {
+app.post('/api/payout/:accountId', authenticateToken, requireOwnership, async (req, res) => {
   try {
     const { amount } = req.body; // w złotówkach, null = wypłać wszystko
 
@@ -752,13 +842,15 @@ app.post('/api/payout/:accountId', async (req, res) => {
       return res.status(400).json({ error: 'Minimalna wypłata to 2 zł' });
     }
 
+    // Idempotency key — zapobiega podwójnej wypłacie przy błędzie sieci
+    const idempotencyKey = `payout-${req.params.accountId}-${payoutAmount}-${Math.floor(Date.now() / 60000)}`;
     const payout = await stripe.payouts.create(
       {
         amount: payoutAmount,
         currency: 'pln',
         description: 'Tip For Me — wypłata napiwków',
       },
-      { stripeAccount: req.params.accountId }
+      { stripeAccount: req.params.accountId, idempotencyKey }
     );
 
     res.json({
@@ -768,15 +860,18 @@ app.post('/api/payout/:accountId', async (req, res) => {
       status: payout.status,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: safeError(error) });
   }
 });
 
 
 // Webhook zarejestrowany na górze pliku (przed express.json())
 
-// Health check — używany przez UptimeRobot żeby serwer nie zasypiał
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+// Globalny error handler — nie ujawnia stack trace w produkcji
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: process.env.NODE_ENV === 'production' ? 'Błąd serwera' : err.message });
+});
 
 
 // ============================================
