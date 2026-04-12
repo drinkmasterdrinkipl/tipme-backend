@@ -203,8 +203,9 @@ app.post('/api/create-connected-account', async (req, res) => {
       },
       settings: {
         // Automatyczna wypłata dzienna — środki trafiają na konto bankowe bez akcji użytkownika
-        // delay_days: 2 = standardowe okno rozliczeniowe dla card_present w Polsce
-        payouts: { schedule: { interval: 'daily', delay_days: 2 } },
+        // delay_days: 'minimum' = Stripe używa najkrótszego dopuszczalnego okresu dla PL
+        // Polska: 7 dni kalendarzowych dla nowego konta, potem 3 dni robocze domyślnie
+        payouts: { schedule: { interval: 'daily', delay_days: 'minimum' } },
       },
       metadata: { password_hash: passwordHash },
     };
