@@ -113,7 +113,7 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
 
         {/* Tap to Pay */}
-        <Text style={s.sectionLabel}>TAP TO PAY ON IPHONE</Text>
+        <Text style={s.sectionLabel}>TAP TO PAY NA IPHONE</Text>
         <View style={s.section}>
           <View style={s.row}>
             <View style={s.rowLeft}>

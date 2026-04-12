@@ -18,6 +18,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.drinki.tipme",
       "buildNumber": "2",
+      "minimumOsVersion": "17.6",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Tip For Me potrzebuje lokalizacji do przetwarzania płatności Tap to Pay.",
         "NFCReaderUsageDescription": "Tip For Me używa NFC do przyjmowania płatności zbliżeniowych.",

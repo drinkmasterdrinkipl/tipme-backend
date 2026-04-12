@@ -47,7 +47,11 @@ async function requestPermissionsAndSchedule() {
       body: 'Zbieraj napiwki zbliżeniowo — klient przykłada kartę do Twojego iPhone\'a. Bez terminala.',
       sound: false,
     },
-    trigger: { seconds: 3 }, // Po 3 sekundach od zalogowania
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: 3,
+      repeats: false,
+    },
   });
 
   await AsyncStorage.setItem(NOTIF_KEY, 'true');
