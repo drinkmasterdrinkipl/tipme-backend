@@ -22,7 +22,7 @@ export default function HomeScreen({ navigation }: any) {
     onUpdateDiscoveredReaders: () => {},
   });
 
-  const finalAmount = selectedPreset || parseFloat(customAmount) || 0;
+  const finalAmount = selectedPreset || parseFloat(customAmount.replace(',', '.')) || 0;
 
   // Wymaganie Apple 5.6: warmup czytnika w tle gdy user wchodzi na HomeScreen
   const warmupReader = useCallback(async () => {

@@ -105,7 +105,7 @@ const s = StyleSheet.create({
   closeTxt: { color: C.text3, fontSize: 14, fontWeight: '700' },
   title: { fontSize: 15, fontWeight: '800', color: C.text1 },
   loader: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    position: 'absolute', top: 60, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: C.bg, zIndex: 10,
   },

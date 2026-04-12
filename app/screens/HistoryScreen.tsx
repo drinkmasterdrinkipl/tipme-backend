@@ -124,6 +124,7 @@ export default function HistoryScreen() {
 
       <Text style={s.sectionLabel}>TRANSAKCJE</Text>
 
+      <View style={{ flex: 1 }}>
       {loading ? (
         <ActivityIndicator color={C.primary} style={{ marginTop: 40 }} />
       ) : error ? (
@@ -139,7 +140,7 @@ export default function HistoryScreen() {
           <Text style={s.emptySub}>Pierwsza płatność pojawi się tutaj</Text>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
           {items.map((item, idx) => {
             if (item.type === 'header') {
               return (
@@ -195,6 +196,7 @@ export default function HistoryScreen() {
           )}
         </ScrollView>
       )}
+      </View>
     </SafeAreaView>
   );
 }
