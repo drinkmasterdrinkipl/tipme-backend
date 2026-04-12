@@ -19,23 +19,33 @@ export default function HomeScreen({ navigation }: any) {
   const warmupDoneRef = useRef(false);
 
   const { discoverReaders, connectReader, disconnectReader } = useStripeTerminal({
-    onUpdateDiscoveredReaders: () => {},
+    // Wymaganie Apple 1.6: status pobieramy z SDK (Apple), nie z lokalnej zmiennej
+    onUpdateDiscoveredReaders: (readers) => {
+      if (readers.length > 0) {
+        AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
+        setTapToPayEnabled(true);
+      }
+    },
   });
 
   const finalAmount = selectedPreset || parseFloat(customAmount.replace(',', '.')) || 0;
 
-  // Wymaganie Apple 5.6: warmup czytnika w tle gdy user wchodzi na HomeScreen
+  // Wymaganie Apple 5.6 + 1.6: warmup czytnika i weryfikacja statusu z SDK (nie z AsyncStorage)
   const warmupReader = useCallback(async () => {
     try {
-      const enabled = await AsyncStorage.getItem('tapToPayEnabled');
-      if (enabled !== 'true') return;
-      if (warmupDoneRef.current) return;
+      // Wymaganie Apple 1.6: sprawdzamy registered users (locationId), nie lokalną flagę
       const locationId = await AsyncStorage.getItem('stripeLocationId');
-      if (!locationId) return;
+      if (!locationId) return; // niezarejestrowany użytkownik
+      if (warmupDoneRef.current) return;
       await disconnectReader().catch(() => {});
       const { error } = await discoverReaders({ discoveryMethod: 'tapToPay', simulated: false });
-      if (error) return;
-      // Daj chwilę na discovery — nie czekamy na connect, samo discovery wystarczy do warmup
+      if (error) {
+        // SDK zwrócił błąd — synchronizujemy stan z Apple
+        await AsyncStorage.removeItem('tapToPayEnabled').catch(() => {});
+        setTapToPayEnabled(false);
+        return;
+      }
+      // onUpdateDiscoveredReaders zaktualizuje tapToPayEnabled gdy znajdzie czytnik
       warmupDoneRef.current = true;
     } catch { /* cicho — warmup nieblokujący */ }
   }, [discoverReaders, disconnectReader]);
@@ -44,10 +54,10 @@ export default function HomeScreen({ navigation }: any) {
     setNavigating(false);
     setSelectedPreset(null);   // reset kwoty po powrocie z płatności
     setCustomAmount('');
-    AsyncStorage.getItem('tapToPayEnabled').then(v => {
-      setTapToPayEnabled(v === 'true');
-      if (v === 'true') warmupReader();
-    }).catch(() => {});
+    // Odczyt wstępny z AsyncStorage dla natychmiastowego UI
+    AsyncStorage.getItem('tapToPayEnabled').then(v => setTapToPayEnabled(v === 'true')).catch(() => {});
+    // Wymaganie Apple 1.6: zawsze weryfikuj aktualny status z SDK
+    warmupReader();
     return () => { warmupDoneRef.current = false; };
   }, [warmupReader]));
 

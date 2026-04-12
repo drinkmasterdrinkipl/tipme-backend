@@ -11,16 +11,28 @@ import {
   ScrollView, ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 
 export default function TapToPayWelcomeScreen({ navigation, route }: any) {
   const { onComplete } = route.params ?? {};
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Wymaganie Apple 4.1: ProximityReaderDiscovery na iOS 18+ (obsługiwane automatycznie
+  // przez natywne Stripe Terminal SDK 5.1.1 gdy wywołamy discoverReaders)
+  const { discoverReaders, disconnectReader } = useStripeTerminal();
+
   const handleEnable = async () => {
     setLoading(true);
     try {
       await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
+      // Wymaganie Apple 4.1: uruchom discovery — na iOS 18+ SDK automatycznie pokaże
+      // systemowy ekran edukacyjny ProximityReaderDiscovery przed naszym ekranem
+      const locationId = await AsyncStorage.getItem('stripeLocationId');
+      if (locationId) {
+        await disconnectReader().catch(() => {});
+        discoverReaders({ discoveryMethod: 'tapToPay', simulated: false }).catch(() => {});
+      }
       navigation.replace('TapToPayEducation', { onComplete });
     } finally {
       setLoading(false);
