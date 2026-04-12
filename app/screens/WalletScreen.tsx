@@ -2,7 +2,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, RefreshControl, ScrollView,
+  ActivityIndicator, RefreshControl, ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
@@ -15,7 +15,6 @@ export default function WalletScreen() {
   const [available, setAvailable] = useState<number | null>(null);
   const [pending, setPending] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [payoutLoading, setPayoutLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [loadError, setLoadError] = useState('');
@@ -65,61 +64,6 @@ export default function WalletScreen() {
 
   const onRefresh = () => { setRefreshing(true); loadBalance(); };
 
-  const handlePayout = async () => {
-    if (payoutLoading) return;
-    if (!available || available < 2) {
-      Alert.alert('Brak środków', 'Minimalna kwota wypłaty to 2 zł.');
-      return;
-    }
-    Alert.alert(
-      'Wypłata',
-      `Wypłacić ${available.toFixed(2)} zł na konto bankowe?\n\nŚrodki pojawią się w ciągu 1-2 dni roboczych.`,
-      [
-        { text: 'Anuluj', style: 'cancel' },
-        {
-          text: 'Wypłać',
-          onPress: async () => {
-            setPayoutLoading(true);
-            try {
-              const accountId = await AsyncStorage.getItem('stripeAccountId');
-              if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
-              const res = await apiFetch(`${API_URL}/api/payout/${accountId}`, {
-                method: 'POST',
-                body: JSON.stringify({ amount: null }),
-              });
-              const data = await res.json();
-              if (!res.ok || data.error) throw new Error(data.error || `Błąd serwera (${res.status})`);
-              const arrival = new Date(data.arrivalDate).toLocaleDateString('pl-PL');
-              Alert.alert('Zlecono wypłatę', `${data.amount.toFixed(2)} zł trafi na konto do ${arrival}.`);
-              loadBalance();
-            } catch (err: any) {
-              Alert.alert('Błąd', err.message || 'Nie udało się zlecić wypłaty');
-            } finally {
-              setPayoutLoading(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const openDashboard = async () => {
-    try {
-      const accountId = await AsyncStorage.getItem('stripeAccountId');
-      if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
-
-      const res = await apiFetch(`${API_URL}/api/dashboard-link/${accountId}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || `Błąd serwera (${res.status})`);
-      if (!data.url) throw new Error('Serwer nie zwrócił linku');
-
-      // Otwórz w WebView wewnątrz aplikacji
-      navigation.navigate('StripeWebView', { url: data.url });
-    } catch (err: any) {
-      Alert.alert('Błąd', err.message || 'Nie udało się otworzyć panelu Stripe');
-    }
-  };
-
   return (
     <SafeAreaView style={s.root}>
       <ScrollView
@@ -145,7 +89,7 @@ export default function WalletScreen() {
           <>
             {/* Saldo dostępne */}
             <View style={s.balanceCard}>
-              <Text style={s.balanceLabel}>DOSTĘPNE DO WYPŁATY</Text>
+              <Text style={s.balanceLabel}>DOSTĘPNE SALDO</Text>
               <Text style={s.balanceAmount}>
                 {available?.toFixed(2)}
                 <Text style={s.balanceCurr}> zł</Text>
@@ -154,18 +98,29 @@ export default function WalletScreen() {
                 <>
                   <View style={s.divider} />
                   <View style={s.pendingRow}>
-                    <Text style={s.pendingLabel}>Oczekujące</Text>
+                    <Text style={s.pendingLabel}>Oczekujące (w rozliczeniu)</Text>
                     <Text style={s.pendingValue}>{pending?.toFixed(2)} zł</Text>
                   </View>
                 </>
               )}
             </View>
 
+            {/* Info o automatycznych wypłatach */}
+            <View style={s.autoPayoutBox}>
+              <Text style={s.autoPayoutIcon}>⚡</Text>
+              <View style={s.autoPayoutText}>
+                <Text style={s.autoPayoutTitle}>Wypłaty automatyczne</Text>
+                <Text style={s.autoPayoutDesc}>
+                  Środki trafiają na Twoje konto bankowe automatycznie — bez żadnej akcji z Twojej strony.
+                </Text>
+              </View>
+            </View>
+
             {/* Info o oczekujących */}
             {(pending ?? 0) > 0 && (
               <View style={s.infoBox}>
                 <Text style={s.infoText}>
-                  Oczekujące środki ({pending?.toFixed(2)} zł) pojawią się jako dostępne po rozliczeniu przez Stripe (zwykle 2 dni robocze).
+                  Oczekujące środki ({pending?.toFixed(2)} zł) są w trakcie rozliczenia przez Stripe. Zwykle zajmuje to 2 dni robocze.
                 </Text>
               </View>
             )}
@@ -174,34 +129,15 @@ export default function WalletScreen() {
             {payouts.length === 0 && (
               <View style={s.firstPayoutBox}>
                 <Text style={s.firstPayoutText}>
-                  ℹ️  Pierwsza wypłata może zająć do 7 dni roboczych — Stripe weryfikuje konto. Kolejne wypłaty trwają 1–2 dni.
+                  ℹ️  Pierwsza wypłata może zająć do 7 dni roboczych — Stripe weryfikuje nowe konto. Kolejne wypłaty trwają 1–2 dni.
                 </Text>
               </View>
             )}
 
-            {/* Przycisk wypłaty */}
-            <TouchableOpacity
-              style={[s.payoutBtn, ((available ?? 0) < 2 || payoutLoading) && s.payoutBtnDisabled]}
-              onPress={handlePayout}
-              disabled={(available ?? 0) < 2 || payoutLoading}
-              activeOpacity={0.85}
-            >
-              {payoutLoading ? (
-                <ActivityIndicator color={C.white} />
-              ) : (
-                <>
-                  <Text style={s.payoutBtnText}>Wypłać na konto bankowe</Text>
-                  <Text style={s.payoutBtnSub}>
-                    {(available ?? 0) < 2 ? 'Brak środków do wypłaty' : '1–2 dni robocze'}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-
             {/* Historia wypłat */}
             {payouts.length > 0 && (
               <View style={s.payoutsSection}>
-                <Text style={s.payoutsTitle}>Historia wypłat</Text>
+                <Text style={s.payoutsTitle}>HISTORIA WYPŁAT</Text>
                 {payouts.map(p => {
                   const statusColor = p.status === 'paid' ? C.success ?? '#22c55e' : p.status === 'failed' ? C.error : C.gold;
                   const statusLabel = p.status === 'paid' ? 'Wypłacono' : p.status === 'failed' ? 'Błąd' : 'W toku';
@@ -230,7 +166,7 @@ export default function WalletScreen() {
             {/* Informacja prawna */}
             <View style={s.legalBox}>
               <Text style={s.legalText}>
-                Płatności obsługuje Stripe Payments Europe Ltd. (licencja instytucji pieniądza elektronicznego UE). Środki trafiają na Twoje saldo Stripe i są automatycznie wypłacane na konto bankowe. Tip For Me nie przechowuje Twoich środków.
+                Płatności obsługuje Stripe Payments Europe Ltd. (licencja instytucji pieniądza elektronicznego UE). Środki są automatycznie wypłacane na konto bankowe co dzień. Tip For Me nie przechowuje Twoich środków.
               </Text>
             </View>
           </>
@@ -259,27 +195,28 @@ const s = StyleSheet.create({
   pendingRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%' },
   pendingLabel: { fontSize: 13, color: C.text3, fontWeight: '500' },
   pendingValue: { fontSize: 13, color: C.text2, fontWeight: '700' },
+  autoPayoutBox: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    backgroundColor: 'rgba(16,185,129,0.07)',
+    borderRadius: 16, borderWidth: 1, borderColor: 'rgba(16,185,129,0.18)',
+    padding: 16, marginBottom: 16, gap: 14,
+  },
+  autoPayoutIcon: { fontSize: 22, marginTop: 1 },
+  autoPayoutText: { flex: 1 },
+  autoPayoutTitle: { fontSize: 14, fontWeight: '800', color: C.success ?? '#22c55e', marginBottom: 4 },
+  autoPayoutDesc: { fontSize: 12, color: C.text3, lineHeight: 18 },
   infoBox: {
     backgroundColor: 'rgba(245,158,11,0.07)', borderRadius: 14,
     borderWidth: 1, borderColor: 'rgba(245,158,11,0.15)',
     padding: 14, marginBottom: 16,
   },
   infoText: { fontSize: 12, color: C.gold, lineHeight: 18 },
-  payoutBtn: {
-    paddingVertical: 20, borderRadius: 22,
-    backgroundColor: C.primary, alignItems: 'center',
-    shadowColor: C.primary, shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4, shadowRadius: 28, marginBottom: 14,
-  },
-  payoutBtnDisabled: { backgroundColor: C.text4, shadowOpacity: 0 },
-  payoutBtnText: { color: C.white, fontSize: 16, fontWeight: '800' },
-  payoutBtnSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 3 },
   payoutsSection: {
     width: '100%', marginBottom: 14,
     backgroundColor: C.card, borderRadius: 20,
     borderWidth: 1, borderColor: C.cardBorder, padding: 20,
   },
-  payoutsTitle: { fontSize: 13, fontWeight: '800', color: C.text2, letterSpacing: 1.5, marginBottom: 14 },
+  payoutsTitle: { fontSize: 10, fontWeight: '800', color: C.text3, letterSpacing: 2.5, marginBottom: 14 },
   payoutRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.cardBorder,

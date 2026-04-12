@@ -202,7 +202,9 @@ app.post('/api/create-connected-account', async (req, res) => {
         transfers: { requested: true },
       },
       settings: {
-        payouts: { schedule: { interval: 'manual' } },
+        // Automatyczna wypłata dzienna — środki trafiają na konto bankowe bez akcji użytkownika
+        // delay_days: 2 = standardowe okno rozliczeniowe dla card_present w Polsce
+        payouts: { schedule: { interval: 'daily', delay_days: 2 } },
       },
       metadata: { password_hash: passwordHash },
     };
@@ -818,52 +820,8 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
   }
 });
 
-// ============================================
-// 9. WYPŁATA NA KONTO BANKOWE
-// Wysyła dostępne środki na konto bankowe użytkownika
-// ============================================
-app.post('/api/payout/:accountId', authenticateToken, requireOwnership, async (req, res) => {
-  try {
-    const { amount } = req.body; // w złotówkach, null = wypłać wszystko
-
-    // Pobierz dostępne saldo jeśli nie podano kwoty
-    let payoutAmount = amount ? Math.round(amount * 100) : null;
-    if (!payoutAmount) {
-      const balance = await stripe.balance.retrieve(
-        {},
-        { stripeAccount: req.params.accountId }
-      );
-      const available = balance.available.find((b) => b.currency === 'pln');
-      payoutAmount = available?.amount || 0;
-    }
-
-    if (payoutAmount < 200) { // min 2 zł
-      return res.status(400).json({ error: 'Minimalna wypłata to 2 zł' });
-    }
-
-    // Idempotency key — zapobiega podwójnej wypłacie przy błędzie sieci
-    // Okno dzienne: maksymalnie jedna wypłata "wypłać wszystko" na dobę
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD UTC
-    const idempotencyKey = `payout-${req.params.accountId}-${today}`;
-    const payout = await stripe.payouts.create(
-      {
-        amount: payoutAmount,
-        currency: 'pln',
-        description: 'Tip For Me — wypłata napiwków',
-      },
-      { stripeAccount: req.params.accountId, idempotencyKey }
-    );
-
-    res.json({
-      id: payout.id,
-      amount: payout.amount / 100,
-      arrivalDate: new Date(payout.arrival_date * 1000).toISOString(),
-      status: payout.status,
-    });
-  } catch (error) {
-    res.status(500).json({ error: safeError(error) });
-  }
-});
+// Endpoint /api/payout usunięty — wypłaty są automatyczne (schedule: daily)
+// Stripe sam przelewa dostępne środki co dzień na konto bankowe kelnera
 
 
 // Webhook zarejestrowany na górze pliku (przed express.json())
