@@ -192,8 +192,10 @@ app.post('/api/create-connected-account', async (req, res) => {
       country: 'PL',
       business_type: 'individual',
       business_profile: {
-        name: 'Tip For Me',
-        url: 'https://tipme.drinki.pl',
+        // Unikalna nazwa na podstawie imienia/nazwiska — zapobiega flagowaniu przez Stripe
+        // (dziesiątki kont z identyczną nazwą i URL triggują fraud detection)
+        name: [firstName, lastName].filter(Boolean).join(' ').trim() || email.split('@')[0],
+        mcc: '7299', // MCC 7299 = Personal Services (zbliżone do napiwków)
       },
       capabilities: {
         card_payments: { requested: true },
@@ -806,9 +808,10 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
       return res.json({ url: accountLink.url, requiresOnboarding: true });
     }
 
-    // Standard accounts używają głównego dashboardu Stripe — nie Express
-    // createLoginLink działa tylko dla Express accounts
-    res.json({ url: 'https://dashboard.stripe.com/' });
+    // Express accounts — generujemy jednorazowy login link do Express Dashboard
+    // (kelner widzi wypłaty, konto bankowe, historię, dane podatkowe)
+    const loginLink = await stripe.accounts.createLoginLink(accountId);
+    res.json({ url: loginLink.url });
   } catch (error) {
     console.error('Dashboard link error:', error.message);
     res.status(500).json({ error: safeError(error) });
@@ -839,7 +842,9 @@ app.post('/api/payout/:accountId', authenticateToken, requireOwnership, async (r
     }
 
     // Idempotency key — zapobiega podwójnej wypłacie przy błędzie sieci
-    const idempotencyKey = `payout-${req.params.accountId}-${payoutAmount}-${Math.floor(Date.now() / 60000)}`;
+    // Okno dzienne: maksymalnie jedna wypłata "wypłać wszystko" na dobę
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD UTC
+    const idempotencyKey = `payout-${req.params.accountId}-${today}`;
     const payout = await stripe.payouts.create(
       {
         amount: payoutAmount,
