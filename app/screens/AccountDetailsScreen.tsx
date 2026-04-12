@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -6,37 +6,43 @@ import { useNavigation } from '@react-navigation/native';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
+// Poza komponentem — zapobiega re-tworzeniu przy każdym renderze
+const Row = ({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) => (
+  <View style={s.row}>
+    <Text style={s.rowLabel}>{label}</Text>
+    <Text style={[s.rowValue, valueColor ? { color: valueColor } : {}]}>{value}</Text>
+  </View>
+);
+
 export default function AccountDetailsScreen() {
   const navigation = useNavigation<any>();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const mountedRef = useRef(true);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const load = async () => {
-    setLoading(true);
-    setError('');
+    if (mountedRef.current) { setLoading(true); setError(''); }
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
       const res = await apiFetch(`${API_URL}/api/account-details/${accountId}`);
+      if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
       const json = await res.json();
       if (json.error) throw new Error(json.error);
-      setData(json);
+      if (mountedRef.current) setData(json);
     } catch (e: any) {
-      setError(e.message || 'Nie udało się pobrać danych konta');
+      if (mountedRef.current) setError(e.message || 'Nie udało się pobrać danych konta');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
-
-  const Row = ({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) => (
-    <View style={s.row}>
-      <Text style={s.rowLabel}>{label}</Text>
-      <Text style={[s.rowValue, valueColor ? { color: valueColor } : {}]}>{value}</Text>
-    </View>
-  );
 
   return (
     <SafeAreaView style={s.root}>
@@ -108,6 +114,7 @@ export default function AccountDetailsScreen() {
                     const accountId = await AsyncStorage.getItem('stripeAccountId');
                     if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
                     const res = await apiFetch(`${API_URL}/api/dashboard-link/${accountId}`);
+                    if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
                     const json = await res.json();
                     if (json.url) navigation.navigate('StripeWebView', { url: json.url });
                   } catch {

@@ -2,8 +2,8 @@
 // Tip For Me — App.tsx
 // ============================================
 
-import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Text, View, AppState, AppStateStatus, StatusBar } from 'react-native';
 import { AppContext } from './AppContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { C } from './theme';
@@ -32,6 +32,7 @@ const Stack = createNativeStackNavigator();
 
 const fetchTokenProvider = async () => {
   const accountId = await AsyncStorage.getItem('stripeAccountId');
+  if (!accountId) throw new Error('Brak ID konta');
   const response = await apiFetch(`${API_URL}/api/connection-token`, {
     method: 'POST',
     body: JSON.stringify({ stripeAccountId: accountId }),
@@ -42,10 +43,22 @@ const fetchTokenProvider = async () => {
   return secret;
 };
 
-// Warm-up Stripe Terminal przy starcie (wymaganie Apple 1.5)
+// Warm-up Stripe Terminal przy starcie i powrocie z tła (wymaganie Apple 1.5)
 function TerminalWarmup() {
   const { initialize } = useStripeTerminal();
-  useEffect(() => { initialize().catch(() => {}); }, [initialize]);
+  const appState = useRef(AppState.currentState);
+
+  useEffect(() => {
+    initialize().catch(() => {});
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (appState.current.match(/inactive|background/) && next === 'active') {
+        initialize().catch(() => {});
+      }
+      appState.current = next;
+    });
+    return () => sub.remove();
+  }, [initialize]);
+
   return null;
 }
 
@@ -89,50 +102,86 @@ function MainTabs() {
   );
 }
 
-// Główny stack — zawsze renderowany, nie duplikuje routów
-function MainStack({ onLogout }: { onLogout: () => void }) {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Main" component={MainTabs} />
-      <Stack.Screen name="Tap" component={TapScreen} />
-      <Stack.Screen name="Success" component={SuccessScreen} />
-      <Stack.Screen name="TapToPayWelcome" component={TapToPayWelcomeScreen} />
-      <Stack.Screen name="TapToPayEducation" component={TapToPayEducationScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-    </Stack.Navigator>
-  );
-}
 
 export default function App() {
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const navigationRef = useRef<any>(null);
+  const welcomeNavigatedRef = useRef(false);
 
   useEffect(() => {
     Promise.all([
       AsyncStorage.getItem('stripeAccountId'),
       AsyncStorage.getItem('authToken'),
-    ]).then(([id, token]) => {
-      // Oba muszą istnieć — jeśli brak tokenu (stara wersja app), wymuś re-login
+      AsyncStorage.getItem('tapToPayWelcomeShown'),
+    ]).then(([id, token, welcomeShown]) => {
       setIsOnboarded(!!(id && token));
+      // Jeśli zalogowany ale nigdy nie widział welcome — pokaż po załadowaniu
+      if (id && token && !welcomeShown) setShowWelcome(true);
     }).catch(() => setIsOnboarded(false));
   }, []);
 
+  const handleOnboardingComplete = useCallback(async () => {
+    const welcomeShown = await AsyncStorage.getItem('tapToPayWelcomeShown');
+    if (!welcomeShown) setShowWelcome(true);
+    setIsOnboarded(true);
+  }, []);
+
+  // Po zalogowaniu — jeśli user nie widział welcome, nawiguj do niego
+  // (osobny useEffect zamiast render prop, żeby SettingsScreen mógł też nawigować i przekazać własny onComplete)
+  useEffect(() => {
+    if (!isOnboarded || !showWelcome || welcomeNavigatedRef.current) return;
+    const t = setTimeout(() => {
+      if (!navigationRef.current) return;
+      welcomeNavigatedRef.current = true;
+      navigationRef.current.navigate('TapToPayWelcome' as never, {
+        onComplete: async () => {
+          await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
+          setShowWelcome(false);
+          welcomeNavigatedRef.current = false;
+          navigationRef.current?.navigate('Main' as never);
+        },
+      } as never);
+    }, 100);
+    return () => clearTimeout(t);
+  }, [isOnboarded, showWelcome]);
+
+  const handleLogout = useCallback(() => {
+    setIsOnboarded(false);
+    setShowWelcome(false);
+    welcomeNavigatedRef.current = false;
+    // Reset backstack — user nie może trafić na stare ekrany po wylogowaniu
+    setTimeout(() => {
+      navigationRef.current?.reset({ index: 0, routes: [{ name: 'Onboarding' as never }] });
+    }, 0);
+  }, []);
+
+  const contextValue = useMemo(() => ({ onLogout: handleLogout }), [handleLogout]);
+
   if (isOnboarded === null) {
-    return <View style={{ flex: 1, backgroundColor: '#0c0a13' }} />;
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0c0a13', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 28, marginBottom: 16 }}>💜</Text>
+        <Text style={{ color: '#a855f7', fontWeight: '800', fontSize: 18 }}>Tip For Me</Text>
+      </View>
+    );
   }
 
   return (
-    <AppContext.Provider value={{ onLogout: () => setIsOnboarded(false) }}>
+    <>
+    <StatusBar barStyle="light-content" backgroundColor="#070511" />
+    <AppContext.Provider value={contextValue}>
     <SafeAreaProvider>
-      <StripeTerminalProvider tokenProvider={fetchTokenProvider} logLevel="verbose">
-        <TerminalWarmup />
-        <NavigationContainer>
+      <StripeTerminalProvider tokenProvider={fetchTokenProvider} logLevel="none">
+        {isOnboarded && <TerminalWarmup />}
+        <NavigationContainer ref={navigationRef}>
           {!isOnboarded ? (
             <Stack.Navigator screenOptions={{ headerShown: false }}>
               <Stack.Screen name="Onboarding">
                 {(props) => (
                   <OnboardingScreen
                     {...props}
-                    onComplete={() => setIsOnboarded(true)}
+                    onComplete={handleOnboardingComplete}
                   />
                 )}
               </Stack.Screen>
@@ -140,7 +189,10 @@ export default function App() {
               <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
             </Stack.Navigator>
           ) : (
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Navigator
+              screenOptions={{ headerShown: false }}
+              initialRouteName="Main"
+            >
               <Stack.Screen name="Main" component={MainTabs} />
               <Stack.Screen name="Tap" component={TapScreen} />
               <Stack.Screen name="Success" component={SuccessScreen} />
@@ -149,12 +201,12 @@ export default function App() {
               <Stack.Screen name="Settings" component={SettingsScreen} />
               <Stack.Screen name="StripeWebView" component={StripeWebViewScreen} />
               <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
-
             </Stack.Navigator>
           )}
         </NavigationContainer>
       </StripeTerminalProvider>
     </SafeAreaProvider>
     </AppContext.Provider>
+    </>
   );
 }

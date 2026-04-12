@@ -32,15 +32,21 @@ export default function SuccessScreen({ navigation, route }: any) {
     };
   }, []);
 
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
   const sendReceipt = async () => {
-    if (!email.includes('@')) return;
+    if (!isValidEmail(email)) return;
     setSending(true);
     setSendError('');
+    const controller = new AbortController();
+    const fetchTimeout = setTimeout(() => controller.abort(), 10000);
     try {
       const res = await apiFetch(`${API_URL}/api/send-receipt`, {
         method: 'POST',
-        body: JSON.stringify({ email, amount, last4, paymentMethod, date }),
+        body: JSON.stringify({ email: email.trim(), amount, last4, paymentMethod, date }),
+        signal: controller.signal,
       });
+      clearTimeout(fetchTimeout);
       if (!res.ok) throw new Error('Błąd serwera — spróbuj ponownie');
       if (!mountedRef.current) return;
       setSent(true);
@@ -52,7 +58,10 @@ export default function SuccessScreen({ navigation, route }: any) {
         setSendError('');
       }, 1500);
     } catch (e: any) {
-      if (mountedRef.current) setSendError(e.message || 'Nie udało się wysłać');
+      clearTimeout(fetchTimeout);
+      if (!mountedRef.current) return;
+      if (e.name === 'AbortError') setSendError('Przekroczono czas oczekiwania — spróbuj ponownie');
+      else setSendError(e.message || 'Nie udało się wysłać');
     } finally {
       if (mountedRef.current) setSending(false);
     }
@@ -79,7 +88,7 @@ export default function SuccessScreen({ navigation, route }: any) {
           <View style={s.infoDivider} />
           <View style={s.infoRow}>
             <Text style={s.infoLabel}>WYPŁATA</Text>
-            <Text style={s.infoValue}>Następny dzień roboczy</Text>
+            <Text style={s.infoValue}>1–2 dni robocze</Text>
           </View>
           <View style={s.infoDivider} />
           <View style={s.infoRow}>
@@ -124,9 +133,9 @@ export default function SuccessScreen({ navigation, route }: any) {
                 />
                 {sendError ? <Text style={s.sendErrorText}>{sendError}</Text> : null}
                 <TouchableOpacity
-                  style={[s.sendBtn, (!email.includes('@') || sending) && s.sendBtnDisabled]}
+                  style={[s.sendBtn, (!isValidEmail(email) || sending) && s.sendBtnDisabled]}
                   onPress={sendReceipt}
-                  disabled={!email.includes('@') || sending}
+                  disabled={!isValidEmail(email) || sending}
                   activeOpacity={0.85}
                 >
                   {sending

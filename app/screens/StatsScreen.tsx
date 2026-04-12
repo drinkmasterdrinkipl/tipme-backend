@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
@@ -25,7 +25,11 @@ function Calendar({ selected, onSelect }: { selected: string; onSelect: (d: stri
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = todayStr();
 
-  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1); };
+  const prevMonth = () => {
+    const minYear = 2024; // aplikacja nie istniała przed 2024
+    if (year <= minYear && month === 0) return;
+    if (month === 0) { setMonth(11); setYear(y => y-1); } else setMonth(m => m-1);
+  };
   const nextMonth = () => {
     const now = new Date();
     if (year > now.getFullYear() || (year === now.getFullYear() && month >= now.getMonth())) return;
@@ -53,14 +57,14 @@ function Calendar({ selected, onSelect }: { selected: string; onSelect: (d: stri
       {Array.from({length: cells.length/7}, (_,w) => (
         <View key={w} style={cal.row}>
           {cells.slice(w*7, w*7+7).map((day, i) => {
-            if (!day) return <View key={i} style={cal.cell} />;
+            if (!day) return <View key={`empty-${w}-${i}`} style={cal.cell} />;
             const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
             const isToday    = ds === today;
             const isSelected = ds === selected;
             const isFuture   = ds > today;
             return (
               <TouchableOpacity
-                key={i}
+                key={ds}
                 style={[cal.cell, isSelected && cal.cellSelected, isToday && !isSelected && cal.cellToday]}
                 onPress={() => !isFuture && onSelect(ds)}
                 disabled={isFuture}
@@ -78,7 +82,7 @@ function Calendar({ selected, onSelect }: { selected: string; onSelect: (d: stri
   );
 }
 
-const DEMO_MODE = false;
+const DEMO_MODE = false; // NIGDY nie ustawiaj na true w produkcji — pokazuje fałszywe dane
 const DEMO_STATS = {
   today: { total: 160, count: 7, avg: 22.86 },
   week:  { total: 745, count: 34, avg: 21.91 },
@@ -100,21 +104,28 @@ export default function StatsScreen() {
   const [stats, setStats]   = useState<any>(DEMO_MODE ? DEMO_STATS : null);
   const [loading, setLoading] = useState(!DEMO_MODE);
   const [error, setError] = useState('');
+  const mountedRef = useRef(true);
 
   const loadStats = useCallback(async (date: string) => {
     if (DEMO_MODE) return;
-    setLoading(true);
-    setError('');
+    if (mountedRef.current) { setLoading(true); setError(''); }
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
       const res = await apiFetch(`${API_URL}/api/stats/${accountId}?date=${date}`);
       if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
       const data = await res.json();
-      setStats(data.today ?? null);
+      if (mountedRef.current) setStats(data.today ?? null);
     } catch (e: any) {
-      setError(e.message || 'Nie udało się pobrać statystyk');
-    } finally { setLoading(false); }
+      if (mountedRef.current) setError(e.message || 'Nie udało się pobrać statystyk');
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
   }, []);
 
   useEffect(() => { loadStats(selectedDate); }, [selectedDate]);
@@ -122,9 +133,9 @@ export default function StatsScreen() {
 
   const handleSelect = (date: string) => { setSelectedDate(date); };
 
-  const total       = stats?.total || 0;
-  const count       = stats?.count || 0;
-  const average     = stats?.average || 0;
+  const total       = Number(stats?.total) || 0;
+  const count       = Number(stats?.count) || 0;
+  const average     = count > 0 ? (Number(stats?.average) || total / count) : 0;
   // Rzeczywiste opłaty ze Stripe (gdy SIMULATED=false)
   // W trybie SIMULATED szacujemy dla pokazania UI
   const stripeFee   = stats?.stripeFee   ?? (total * 0.014 + count * 0.40);
@@ -169,8 +180,8 @@ export default function StatsScreen() {
               {[
                 { label: 'ZEBRANO', value: `${total.toFixed(0)} zł`, color: C.primaryLight },
                 { label: 'NETTO', value: `${net.toFixed(2)} zł`, color: C.success },
-              ].map((c, i) => (
-                <View key={i} style={s.card}>
+              ].map((c) => (
+                <View key={c.label} style={s.card}>
                   <Text style={s.cardLabel}>{c.label}</Text>
                   <Text style={[s.cardValue, { color: c.color }]}>{c.value}</Text>
                 </View>
@@ -186,7 +197,7 @@ export default function StatsScreen() {
                   ['Opłata Stripe (rzeczywista)', `−${stripeFee.toFixed(2)} zł`, false],
                   ['Twój zarobek netto', `${net.toFixed(2)} zł`, true],
                 ].map(([label, val, highlight], i) => (
-                  <View key={i} style={[s.breakdownRow, i > 0 && s.breakdownBorder]}>
+                  <View key={label as string} style={[s.breakdownRow, i > 0 && s.breakdownBorder]}>
                     <Text style={s.breakdownLabel}>{label as string}</Text>
                     <Text style={[s.breakdownVal, highlight && { color: C.success, fontWeight: '800' }]}>{val as string}</Text>
                   </View>

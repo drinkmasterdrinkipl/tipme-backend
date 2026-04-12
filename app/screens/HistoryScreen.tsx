@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
@@ -7,7 +7,7 @@ import { C } from '../theme';
 import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
 const PAGE_SIZE = 15;
-const DEMO_MODE = false;
+const DEMO_MODE = false; // NIGDY nie ustawiaj na true w produkcji — pokazuje fałszywe dane
 
 const today = new Date().toISOString();
 const yesterday = new Date(Date.now() - 86400000).toISOString();
@@ -64,32 +64,49 @@ export default function HistoryScreen() {
   const [todayTotal, setTodayTotal] = useState(DEMO_MODE ? 35 : 0);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
+  const mountedRef = useRef(true);
 
   const loadTransactions = useCallback(async () => {
-    setLoading(true);
-    setError('');
+    if (mountedRef.current) { setLoading(true); setError(''); }
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
       const res = await apiFetch(`${API_URL}/api/transactions/${accountId}?limit=100`);
       if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
       const data = await res.json();
+      if (!mountedRef.current) return;
       const txs: Transaction[] = data.transactions || [];
       setTransactions(txs);
       setPage(1);
       const today = todayStr();
       setTodayTotal(txs.filter(t => txDateStr(t.created) === today).reduce((s, t) => s + t.amount, 0));
     } catch (e: any) {
-      setError(e.message || 'Nie udało się pobrać historii');
-    } finally { setLoading(false); }
+      if (mountedRef.current) setError(e.message || 'Nie udało się pobrać historii');
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { if (!DEMO_MODE) loadTransactions(); }, [loadTransactions]);
+  useEffect(() => {
+    mountedRef.current = true;
+    if (!DEMO_MODE) loadTransactions();
+    return () => { mountedRef.current = false; };
+  }, [loadTransactions]);
   useRefreshOnNewDay(useCallback(() => { if (!DEMO_MODE) loadTransactions(); }, [loadTransactions]));
 
   const totalPages = Math.max(1, Math.ceil(transactions.length / PAGE_SIZE));
-  const pageTxs = transactions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const items = groupByDay(pageTxs);
+  const pageTxs = useMemo(
+    () => transactions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [transactions, page],
+  );
+  const items = useMemo(() => groupByDay(pageTxs), [pageTxs]);
+  const timeMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const tx of pageTxs) {
+      m[tx.id] = new Date(tx.created).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    }
+    return m;
+  }, [pageTxs]);
 
   return (
     <SafeAreaView style={s.root}>
@@ -126,20 +143,19 @@ export default function HistoryScreen() {
           {items.map((item, idx) => {
             if (item.type === 'header') {
               return (
-                <View key={`h-${idx}`} style={s.dayHeader}>
+                <View key={`h-${item.label}`} style={s.dayHeader}>
                   <Text style={s.dayHeaderText}>{item.label}</Text>
                 </View>
               );
             }
             const tx = item as Transaction & { type: 'tx' };
-            const time = new Date(tx.created).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
             return (
               <View key={tx.id} style={s.item}>
                 <View style={s.itemLeft}>
                   <View style={s.itemIcon}><Text style={s.itemIconText}>↑</Text></View>
                   <View>
                     <Text style={s.itemMethod}>{tx.paymentMethod}</Text>
-                    <Text style={s.itemTime}>{time}</Text>
+                    <Text style={s.itemTime}>{timeMap[tx.id]}</Text>
                   </View>
                 </View>
                 <Text style={s.itemAmount}>+{tx.amount.toFixed(0)} zł</Text>

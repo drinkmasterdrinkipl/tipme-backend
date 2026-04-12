@@ -1,59 +1,78 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput,
-  StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert,
+  StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { API_URL, apiFetch } from '../config';
+import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import { C } from '../theme';
-import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
 const TIP_PRESETS = [5, 10, 15, 20, 30, 40, 50, 100, 200];
 
 export default function HomeScreen({ navigation }: any) {
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState('');
-  const [todayTotal, setTodayTotal] = useState(0);
-  const [todayCount, setTodayCount] = useState(0);
   const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
+  const [navigating, setNavigating] = useState(false);
+  const warmupDoneRef = useRef(false);
+
+  const { discoverReaders, connectReader, disconnectReader } = useStripeTerminal({
+    onUpdateDiscoveredReaders: () => {},
+  });
 
   const finalAmount = selectedPreset || parseFloat(customAmount) || 0;
 
-  useFocusEffect(useCallback(() => {
-    loadStats();
-    AsyncStorage.getItem('tapToPayEnabled').then(v => setTapToPayEnabled(v === 'true'));
-  }, []));
-
-  useRefreshOnNewDay(useCallback(() => {
-    loadStats();
-  }, []));
-
-  const loadStats = async () => {
+  // Wymaganie Apple 5.6: warmup czytnika w tle gdy user wchodzi na HomeScreen
+  const warmupReader = useCallback(async () => {
     try {
-      const accountId = await AsyncStorage.getItem('stripeAccountId');
-      if (!accountId) return;
-      const res = await apiFetch(`${API_URL}/api/stats/${accountId}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setTodayTotal(data.today?.total ?? 0);
-      setTodayCount(data.today?.count ?? 0);
-    } catch {
-      // Sieć niedostępna — zostaw 0, użytkownik zobaczy dane przy odświeżeniu
-    }
-  };
+      const enabled = await AsyncStorage.getItem('tapToPayEnabled');
+      if (enabled !== 'true') return;
+      if (warmupDoneRef.current) return;
+      const locationId = await AsyncStorage.getItem('stripeLocationId');
+      if (!locationId) return;
+      await disconnectReader().catch(() => {});
+      const { error } = await discoverReaders({ discoveryMethod: 'tapToPay', simulated: false });
+      if (error) return;
+      // Daj chwilę na discovery — nie czekamy na connect, samo discovery wystarczy do warmup
+      warmupDoneRef.current = true;
+    } catch { /* cicho — warmup nieblokujący */ }
+  }, [discoverReaders, disconnectReader]);
+
+  useFocusEffect(useCallback(() => {
+    setNavigating(false);
+    setSelectedPreset(null);   // reset kwoty po powrocie z płatności
+    setCustomAmount('');
+    AsyncStorage.getItem('tapToPayEnabled').then(v => {
+      setTapToPayEnabled(v === 'true');
+      if (v === 'true') warmupReader();
+    }).catch(() => {});
+    return () => { warmupDoneRef.current = false; };
+  }, [warmupReader]));
 
   const selectPreset = (val: number) => { setSelectedPreset(val); setCustomAmount(''); };
   const typeCustom = (val: string) => { setCustomAmount(val); setSelectedPreset(null); };
 
   const startPayment = () => {
+    if (finalAmount < 2 || navigating) return;
+    Keyboard.dismiss();
+    setNavigating(true);
     if (!tapToPayEnabled) {
-      Alert.alert('Tap to Pay wyłączony', 'Włącz Tap to Pay w Ustawieniach, aby przyjmować płatności.');
+      // Wymaganie Apple 5.3: przycisk nigdy nie zablokowany — otwórz flow włączenia
+      navigation.navigate('TapToPayWelcome', {
+        onComplete: () => {
+          AsyncStorage.setItem('tapToPayEnabled', 'true').then(() => {
+            setTapToPayEnabled(true);
+            navigation.navigate('Tap', { amount: Math.round(finalAmount * 100) });
+          }).finally(() => setNavigating(false));
+        },
+      });
       return;
     }
-    if (finalAmount < 2) return;
     navigation.navigate('Tap', { amount: Math.round(finalAmount * 100) });
+    // Reset po chwili — na wypadek gdyby user wrócił bez płatności
+    setTimeout(() => setNavigating(false), 1000);
   };
 
   return (
@@ -121,16 +140,14 @@ export default function HomeScreen({ navigation }: any) {
           {/* CTA — wewnątrz ScrollView */}
           <View style={s.ctaWrap}>
             <TouchableOpacity
-              style={[s.cta, tapToPayEnabled && finalAmount >= 2 && s.ctaActive]}
+              style={[s.cta, finalAmount >= 2 && s.ctaActive]}
               onPress={startPayment}
               activeOpacity={0.85}
             >
-              <Text style={[s.ctaText, tapToPayEnabled && finalAmount >= 2 && s.ctaTextActive]}>
-                {!tapToPayEnabled
-                  ? 'Włącz Tap to Pay w Ustawieniach'
-                  : finalAmount >= 2
-                    ? `Pobierz  ${finalAmount % 1 === 0 ? finalAmount.toFixed(0) : finalAmount.toFixed(2)} zł`
-                    : finalAmount > 0 ? 'Minimalna kwota: 2 zł' : 'Wybierz kwotę'}
+              <Text style={[s.ctaText, finalAmount >= 2 && s.ctaTextActive]}>
+                {finalAmount >= 2
+                  ? `Pobierz ${finalAmount % 1 === 0 ? finalAmount.toFixed(0) : finalAmount.toFixed(2)} zł`
+                  : finalAmount > 0 ? 'Minimalna kwota: 2 zł' : 'Wybierz kwotę'}
               </Text>
             </TouchableOpacity>
           </View>

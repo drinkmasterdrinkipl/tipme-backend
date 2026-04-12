@@ -8,11 +8,9 @@ import React, { useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Dimensions,
+  ScrollView, useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const { width } = Dimensions.get('window');
 
 const SLIDES = [
   {
@@ -55,6 +53,7 @@ const SLIDES = [
 
 export default function TapToPayEducationScreen({ navigation, route }: any) {
   const { onComplete } = route.params ?? {};
+  const { width } = useWindowDimensions();
   const [currentSlide, setCurrentSlide] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
@@ -72,8 +71,10 @@ export default function TapToPayEducationScreen({ navigation, route }: any) {
   };
 
   const handleFinish = async () => {
-    await AsyncStorage.setItem('tapToPayEnabled', 'true');
-    await AsyncStorage.setItem('tapToPayEducationShown', 'true');
+    try {
+      await AsyncStorage.setItem('tapToPayEnabled', 'true');
+      await AsyncStorage.setItem('tapToPayEducationShown', 'true');
+    } catch { /* kontynuuj nawet jeśli AsyncStorage zawiedzie */ }
     typeof onComplete === 'function' ? onComplete() : navigation.navigate('Main');
   };
 
@@ -93,7 +94,7 @@ export default function TapToPayEducationScreen({ navigation, route }: any) {
         style={s.slides}
       >
         {SLIDES.map((slide, i) => (
-          <View key={i} style={s.slide}>
+          <View key={i} style={[s.slide, { width }]}>
             <View style={s.slideIconWrap}>
               <Text style={s.slideIcon}>{slide.icon}</Text>
             </View>
@@ -142,7 +143,6 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#070511' },
   slides: { flex: 1 },
   slide: {
-    width,
     flex: 1,
     paddingHorizontal: 32,
     alignItems: 'center',

@@ -1,38 +1,14 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator,
+  ActivityIndicator, Platform,
 } from 'react-native';
 import { useStripeTerminal, ErrorCode } from '@stripe/stripe-terminal-react-native';
 import type { Reader } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
-
-// Statyczne cząsteczki w tle
-const PARTICLES = [
-  { top: 28, left: 30, size: 2, op: 0.6 },
-  { top: 40, left: 80, size: 1.5, op: 0.4 },
-  { top: 35, left: 140, size: 2.5, op: 0.7 },
-  { top: 55, left: 200, size: 1.5, op: 0.5 },
-  { top: 30, left: 260, size: 2, op: 0.6 },
-  { top: 70, left: 50, size: 1.5, op: 0.3 },
-  { top: 80, left: 110, size: 2, op: 0.5 },
-  { top: 65, left: 170, size: 1, op: 0.4 },
-  { top: 90, left: 230, size: 2.5, op: 0.6 },
-  { top: 100, left: 20, size: 2, op: 0.5 },
-  { top: 110, left: 90, size: 1.5, op: 0.3 },
-  { top: 120, left: 150, size: 2, op: 0.7 },
-  { top: 95, left: 290, size: 1.5, op: 0.4 },
-  { top: 140, left: 60, size: 2, op: 0.5 },
-  { top: 130, left: 200, size: 1, op: 0.6 },
-  { top: 150, left: 330, size: 2, op: 0.3 },
-  { top: 45, left: 310, size: 1.5, op: 0.5 },
-  { top: 75, left: 350, size: 2, op: 0.4 },
-  { top: 115, left: 120, size: 1, op: 0.6 },
-  { top: 160, left: 250, size: 1.5, op: 0.4 },
-];
 
 const SIMULATED = false;
 
@@ -47,6 +23,10 @@ export default function TapScreen({ navigation, route }: any) {
   const [initProgress, setInitProgress] = useState(0);
   const [initStep, setInitStep] = useState('Inicjalizacja SDK...');
   const discoveredRef = useRef<Reader.Type[]>([]);
+  const paymentIntentIdRef = useRef<string | null>(null);
+  const isInitializingRef = useRef(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
 
 
   const {
@@ -59,25 +39,11 @@ export default function TapScreen({ navigation, route }: any) {
   const statusRef = useRef(status);
   useEffect(() => { statusRef.current = status; }, [status]);
 
-  useEffect(() => {
-    if (!amount || amount <= 0) { navigation.goBack(); return; }
-    initializeReader();
-    return () => {
-      // Nie rozłączaj podczas aktywnej transakcji — przerwałoby płatność
-      if (statusRef.current !== 'processing') {
-        disconnectReader().catch(() => {});
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (status === 'ready') processPayment();
-  }, [status, processPayment]);
-
   const translateError = useCallback((msg: string): string => {
     if (!msg) return 'Nieznany błąd';
+    if (msg.includes('osVersionNotSupported') || msg.includes('OS version') || msg.includes('PaymentCardReaderError')) return 'Ta funkcja wymaga iOS 17.6 lub nowszego. Zaktualizuj system w Ustawieniach iPhone\'a.';
     if (msg.includes('Already connected')) return 'Czytnik już połączony. Trwa rozłączanie, spróbuj ponownie.';
-    if (msg.includes('Network request failed') || msg.includes('network')) return 'Brak połączenia z serwerem. Sprawdź internet i spróbuj ponownie.';
+    if (msg.includes('Network request failed') || msg.includes('network') || msg.includes('-1009')) return 'Brak połączenia z internetem. Sprawdź sieć i spróbuj ponownie.';
     if (msg.includes('timed out') || msg.includes('timeout') || msg.includes('Przekroczono czas')) return 'Przekroczono czas oczekiwania. Spróbuj ponownie.';
     if (msg.includes('canceled') || msg.includes('Canceled')) return 'Płatność anulowana.';
     if (msg.includes('declined')) return 'Karta odrzucona. Spróbuj inną kartą.';
@@ -88,67 +54,10 @@ export default function TapScreen({ navigation, route }: any) {
     return msg;
   }, []);
 
-  const initializeReader = async () => {
-    try {
-      setStatus('connecting');
-      setInitProgress(0);
-
-      if (SIMULATED) {
-        setInitStep('Szukanie czytnika...');
-        setInitProgress(35);
-        await new Promise(r => setTimeout(r, 800));
-        setInitStep('Wykrywanie urządzenia...');
-        setInitProgress(60);
-        await new Promise(r => setTimeout(r, 600));
-        setInitStep('Łączenie...');
-        setInitProgress(80);
-        await new Promise(r => setTimeout(r, 600));
-        setInitProgress(100);
-        await new Promise(r => setTimeout(r, 300));
-        setStatus('ready');
-        return;
-      }
-
-      // Rozłącz poprzednią sesję, jeśli istnieje
-      await disconnectReader().catch(() => {});
-
-      discoveredRef.current = [];
-      setInitStep('Szukanie czytnika...');
-      setInitProgress(35);
-      const { error: discoverError } = await discoverReaders({ discoveryMethod: 'tapToPay', simulated: false });
-      if (discoverError) throw new Error(discoverError.message);
-
-      setInitStep('Wykrywanie urządzenia...');
-      setInitProgress(60);
-
-      let waited = 0;
-      while (discoveredRef.current.length === 0 && waited < 15000) {
-        await new Promise(r => setTimeout(r, 300));
-        waited += 300;
-      }
-
-      const readers = discoveredRef.current;
-      if (!readers || readers.length === 0) throw new Error('Nie znaleziono czytnika NFC.');
-
-      setInitStep('Łączenie...');
-      setInitProgress(80);
-      const locationId = await AsyncStorage.getItem('stripeLocationId');
-      if (!locationId) throw new Error('Brak lokalizacji Stripe. Wyloguj się i zaloguj ponownie.');
-      const { error: connectError } = await connectReader({ discoveryMethod: 'tapToPay', reader: readers[0], locationId });
-      if (connectError) throw new Error(connectError.message);
-
-      setInitProgress(100);
-      await new Promise(r => setTimeout(r, 300));
-      setStatus('ready');
-    } catch (error: any) {
-      setStatus('error');
-      setErrorMsg(translateError(error.message || ''));
-    }
-  };
-
   const processPayment = useCallback(async () => {
     try {
       setStatus('processing');
+      statusRef.current = 'processing'; // bezpośrednia synchronizacja — useEffect jest asynchroniczny
 
       if (SIMULATED) {
         await new Promise(r => setTimeout(r, 2500));
@@ -180,6 +89,7 @@ export default function TapScreen({ navigation, route }: any) {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         clientSecret = data.clientSecret;
+        paymentIntentIdRef.current = data.paymentIntentId ?? null;
       } catch (error: any) {
         clearTimeout(fetchTimeout);
         if (error.name === 'AbortError') throw new Error('Przekroczono czas oczekiwania');
@@ -198,9 +108,15 @@ export default function TapScreen({ navigation, route }: any) {
       const { paymentIntent: confirmedPI, error: confirmError } = await confirmPaymentIntent({ paymentIntent: collectedPI! });
       if (confirmError) throw new Error(confirmError.message);
 
+      // Sprawdź status — upewnij się że płatność faktycznie przeszła
+      if (confirmedPI?.status !== 'succeeded' && confirmedPI?.status !== 'processing') {
+        throw new Error(`Płatność nie powiodła się (status: ${confirmedPI?.status ?? 'unknown'})`);
+      }
+
       const charge = confirmedPI?.charges?.[0];
       const details = charge?.paymentMethodDetails?.cardPresentDetails;
 
+      paymentIntentIdRef.current = null; // wyczysć po sukcesie
       navigation.replace('Success', {
         amount: amountZl,
         paymentMethod: details?.brand ?? 'Karta',
@@ -212,12 +128,125 @@ export default function TapScreen({ navigation, route }: any) {
     }
   }, [amount, amountZl, navigation, collectPaymentMethod, confirmPaymentIntent, retrievePaymentIntent, translateError]);
 
+  useEffect(() => {
+    if (!amount || amount < 200) { navigation.goBack(); return; }
+    initializeReader();
+    return () => {
+      if (statusRef.current !== 'processing') {
+        disconnectReader().catch(() => {});
+        // Anuluj niezakończony Payment Intent — czyści dashboard i zapobiega Incomplete
+        if (paymentIntentIdRef.current) {
+          AsyncStorage.getItem('stripeAccountId').then(accountId => {
+            if (!accountId) return;
+            apiFetch(`${API_URL}/api/cancel-payment-intent`, {
+              method: 'POST',
+              body: JSON.stringify({
+                paymentIntentId: paymentIntentIdRef.current,
+                stripeAccountId: accountId,
+              }),
+            }).catch(() => {});
+          });
+          paymentIntentIdRef.current = null;
+        }
+      }
+    };
+  }, [initializeReader]);
+
+  useEffect(() => {
+    if (status === 'ready') processPayment();
+  }, [status, processPayment]);
+
+  const initializeReader = useCallback(async () => {
+    if (isInitializingRef.current) return;
+    isInitializingRef.current = true;
+    try {
+      setStatus('connecting');
+      setInitProgress(0);
+
+      // Wymaganie Apple 1.4: sprawdź wersję iOS
+      if (Platform.OS === 'ios') {
+        const version = typeof Platform.Version === 'string'
+          ? parseFloat(Platform.Version)
+          : Platform.Version;
+        const [major, minor] = String(version).split('.').map(Number);
+        if (major < 17 || (major === 17 && (minor ?? 0) < 6)) {
+          throw new Error('osVersionNotSupported');
+        }
+      }
+
+      if (SIMULATED) {
+        setInitStep('Szukanie czytnika...');
+        setInitProgress(35);
+        await new Promise(r => setTimeout(r, 800));
+        setInitStep('Wykrywanie urządzenia...');
+        setInitProgress(60);
+        await new Promise(r => setTimeout(r, 600));
+        setInitStep('Łączenie...');
+        setInitProgress(80);
+        await new Promise(r => setTimeout(r, 600));
+        setInitProgress(100);
+        await new Promise(r => setTimeout(r, 300));
+        setStatus('ready');
+        return;
+      }
+
+      // Jeśli warmup z HomeScreen już odkrył czytnik — pomiń discovery (szybsza inicjalizacja)
+      const alreadyDiscovered = discoveredRef.current.length > 0;
+
+      if (!alreadyDiscovered) {
+        await disconnectReader().catch(() => {});
+        discoveredRef.current = [];
+        setInitStep('Szukanie czytnika...');
+        setInitProgress(25);
+        const { error: discoverError } = await discoverReaders({ discoveryMethod: 'tapToPay', simulated: false });
+        if (discoverError) throw new Error(discoverError.message);
+
+        setInitStep('Wykrywanie urządzenia...');
+        setInitProgress(50);
+
+        let waited = 0;
+        while (discoveredRef.current.length === 0 && waited < 15000) {
+          await new Promise(r => setTimeout(r, 300));
+          waited += 300;
+        }
+      } else {
+        // Warmup znalazł już czytnik — rozłącz poprzednią sesję przed nowym connect
+        await disconnectReader().catch(() => {});
+        setInitStep('Czytnik gotowy...');
+        setInitProgress(60);
+      }
+
+      const readers = discoveredRef.current;
+      if (!readers || readers.length === 0) throw new Error('Nie znaleziono czytnika NFC.');
+
+      setInitStep('Łączenie...');
+      setInitProgress(80);
+      const locationId = await AsyncStorage.getItem('stripeLocationId');
+      if (!locationId) throw new Error('Brak lokalizacji Stripe. Wyloguj się i zaloguj ponownie.');
+      const { error: connectError } = await connectReader({ discoveryMethod: 'tapToPay', reader: readers[0], locationId });
+      if (connectError) throw new Error(connectError.message);
+
+      setInitProgress(100);
+      await new Promise(r => setTimeout(r, 300));
+      setStatus('ready');
+    } catch (error: any) {
+      setStatus('error');
+      setErrorMsg(translateError(error.message || ''));
+    } finally {
+      isInitializingRef.current = false;
+    }
+  }, [discoverReaders, connectReader, disconnectReader, translateError]);
+
   return (
     <SafeAreaView style={s.root}>
 
       {/* Góra — przycisk powrotu + merchant */}
       <View style={s.topBar}>
-        <TouchableOpacity style={s.back} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={[s.back, status === 'processing' && { opacity: 0.3 }]}
+          onPress={() => navigation.goBack()}
+          disabled={status === 'processing'}
+        >
           <Text style={s.backIcon}>←</Text>
         </TouchableOpacity>
         <View style={s.merchantHeader}>
@@ -255,9 +284,15 @@ export default function TapScreen({ navigation, route }: any) {
             <View style={s.errorPill}>
               <Text style={s.errorPillText}>{errorMsg}</Text>
             </View>
-            <TouchableOpacity style={s.retryBtn} onPress={initializeReader}>
-              <Text style={s.retryText}>Spróbuj ponownie</Text>
-            </TouchableOpacity>
+            {retryCount < MAX_RETRIES ? (
+              <TouchableOpacity style={s.retryBtn} onPress={() => { setRetryCount(c => c + 1); initializeReader(); }}>
+                <Text style={s.retryText}>Spróbuj ponownie ({MAX_RETRIES - retryCount} prób pozostało)</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={s.retryBtn} onPress={() => navigation.goBack()}>
+                <Text style={s.retryText}>Wróć i spróbuj ponownie</Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
       </View>
@@ -279,8 +314,8 @@ export default function TapScreen({ navigation, route }: any) {
             'Wypłata na konto\n1-2 dni robocze',
             'Szyfrowanie\nend-to-end',
             'Zgodność z\nnormą PCI DSS',
-          ].map((txt, i) => (
-            <View key={i} style={s.infoGridItem}>
+          ].map((txt) => (
+            <View key={txt} style={s.infoGridItem}>
               <View style={s.infoGridIcon}><Text style={s.infoGridIconText}>✓</Text></View>
               <Text style={s.infoGridText}>{txt}</Text>
             </View>

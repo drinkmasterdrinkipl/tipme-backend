@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 // Pierwszy ekran który widzi nowy użytkownik
 // ============================================
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -29,37 +29,24 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [pollCount, setPollCount] = useState(0);
   const [statusMsg, setStatusMsg] = useState('');
+  const [onboardingUrl, setOnboardingUrl] = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
+  const ensureLocationRef = useRef(false);
   const MAX_POLLS = 240; // 240 × 30s = 2 godziny
 
-  // Automatyczne sprawdzanie statusu co 30s gdy jesteśmy na ekranie 'stripe'
   useEffect(() => {
-    if (step === 'stripe') {
-      pollRef.current = setInterval(() => {
-        setPollCount(c => {
-          const next = c + 1;
-          if (next >= MAX_POLLS) {
-            if (pollRef.current) clearInterval(pollRef.current);
-            Alert.alert(
-              'Weryfikacja trwa długo',
-              'Stripe nadal weryfikuje Twoje dane. Dostaniesz email gdy konto będzie gotowe — możesz zamknąć aplikację.',
-            );
-          }
-          return next;
-        });
-        checkStripeStatus(true);
-      }, 30000);
-    }
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [step]);
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // ============================================
   // Rejestracja + tworzenie konta Stripe Connect
   // ============================================
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+
   const connectStripe = async () => {
-    if (!email.includes('@')) {
+    if (!isValidEmail(email)) {
       Alert.alert('Błąd', 'Podaj poprawny adres email');
       return;
     }
@@ -84,7 +71,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         );
         return;
       }
-      if (error) throw new Error(error);
+      if (!res.ok || error) throw new Error(error || `Błąd serwera (${res.status})`);
 
       // Zapisz ID konta lokalnie
       await AsyncStorage.setItem('stripeAccountId', accountId);
@@ -92,15 +79,16 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
 
       // Otwórz onboarding Stripe wewnątrz aplikacji (WebView)
       // Po powrocie automatycznie sprawdź status konta
+      setOnboardingUrl(onboardingUrl);
       navigation.navigate('StripeWebView', {
         url: onboardingUrl,
         onDone: () => checkStripeStatus(),
       });
       setStep('stripe');
     } catch (error: any) {
-      Alert.alert('Błąd', error.message || 'Nie udało się połączyć ze Stripe');
+      if (mountedRef.current) Alert.alert('Błąd', error.message || 'Nie udało się połączyć ze Stripe');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -108,7 +96,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   // Logowanie istniejącym kontem Stripe
   // ============================================
   const loginWithEmail = async () => {
-    if (!email.includes('@')) {
+    if (!isValidEmail(email)) {
       Alert.alert('Błąd', 'Podaj poprawny adres email');
       return;
     }
@@ -159,9 +147,9 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         setStep('stripe');
       }
     } catch (error: any) {
-      Alert.alert('Błąd', error.message || 'Nieprawidłowy email lub hasło');
+      if (mountedRef.current) Alert.alert('Błąd', error.message || 'Nieprawidłowy email lub hasło');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -174,7 +162,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
     try {
       const res = await apiFetch(`${API_URL}/api/auth/set-password`, {
         method: 'POST',
-        body: JSON.stringify({ accountId: migrationAccountId, password }),
+        body: JSON.stringify({ accountId: migrationAccountId, email, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Błąd serwera');
@@ -189,62 +177,100 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         setStep('stripe');
       }
     } catch (error: any) {
-      Alert.alert('Błąd', error.message || 'Nie udało się ustawić hasła');
+      if (mountedRef.current) Alert.alert('Błąd', error.message || 'Nie udało się ustawić hasła');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
   // ============================================
   // Helper — tworzy lokalizację Stripe Terminal jeśli brak
+  // Mutex ref zapobiega równoległym wywołaniom (np. z pollingu i checkStripeStatus)
   // ============================================
   const ensureLocationId = async (accountId: string) => {
     const existing = await AsyncStorage.getItem('stripeLocationId');
     if (existing) return;
+    if (ensureLocationRef.current) return; // już trwa tworzenie
+    ensureLocationRef.current = true;
     try {
       const locRes = await apiFetch(`${API_URL}/api/create-location`, {
         method: 'POST',
         body: JSON.stringify({ stripeAccountId: accountId, displayName: 'Tip For Me' }),
       });
       const locData = await locRes.json();
+      if (!locRes.ok) throw new Error(`Błąd lokalizacji: ${locData.error}`);
       if (locData.locationId) await AsyncStorage.setItem('stripeLocationId', locData.locationId);
-    } catch {}
+    } finally {
+      ensureLocationRef.current = false;
+    }
   };
 
   // ============================================
   // Sprawdź czy użytkownik dokończył onboarding
+  // useCallback — żeby interval zawsze miał aktualną referencję
+  // WAŻNE: musi być zadeklarowany PRZED useEffect który go używa w deps
   // ============================================
-  const checkStripeStatus = async (silent = false) => {
-    if (!silent) setLoading(true);
+  const checkStripeStatus = useCallback(async (silent = false) => {
+    if (!silent && mountedRef.current) setLoading(true);
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) {
-        if (!silent) Alert.alert('Błąd', 'Brak ID konta. Zacznij rejestrację od nowa.');
+        if (!silent && mountedRef.current) Alert.alert('Błąd', 'Brak ID konta. Zacznij rejestrację od nowa.');
         return;
       }
       const res = await apiFetch(`${API_URL}/api/account-status/${accountId}`);
+      if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
       const data = await res.json();
+      if (!mountedRef.current) return;
 
       if (data.chargesEnabled) {
         if (pollRef.current) clearInterval(pollRef.current);
         if (data.token) await AsyncStorage.setItem('authToken', data.token);
         await ensureLocationId(accountId);
+        if (!mountedRef.current) return;
         if (onComplete) onComplete();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       } else if (!data.detailsSubmitted) {
         // Zapisane ID wskazuje na złe konto — wyczyść i wróć do logowania
-        await AsyncStorage.multiRemove(['stripeAccountId', 'authToken', 'stripeLocationId']);
+        await AsyncStorage.multiRemove([
+          'stripeAccountId', 'authToken', 'stripeLocationId', 'userEmail',
+          'tapToPayEnabled', 'tapToPayWelcomeShown', 'tapToPayEducationShown',
+        ]).catch(() => {});
+        if (!mountedRef.current) return;
         setStatusMsg('');
         setStep('login');
       } else {
-        setStatusMsg('Konto jeszcze niezweryfikowane. Stripe może potrzebować do 24h.');
+        if (mountedRef.current) setStatusMsg('Konto jeszcze niezweryfikowane. Stripe może potrzebować do 24h.');
       }
     } catch (error) {
-      if (!silent) setStatusMsg('Błąd połączenia — sprawdź internet i spróbuj ponownie.');
+      if (!silent && mountedRef.current) setStatusMsg('Błąd połączenia — sprawdź internet i spróbuj ponownie.');
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent && mountedRef.current) setLoading(false);
     }
-  };
+  }, [onComplete, navigation]);
+
+  // Automatyczne sprawdzanie statusu co 30s gdy jesteśmy na ekranie 'stripe'
+  useEffect(() => {
+    if (step === 'stripe') {
+      pollRef.current = setInterval(() => {
+        setPollCount(c => {
+          const next = c + 1;
+          if (next >= MAX_POLLS) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            Alert.alert(
+              'Weryfikacja trwa długo',
+              'Stripe nadal weryfikuje Twoje dane. Dostaniesz email gdy konto będzie gotowe — możesz zamknąć aplikację.',
+            );
+          }
+          return next;
+        });
+        checkStripeStatus(true);
+      }, 30000);
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [step, checkStripeStatus]);
 
   // ============================================
   // EKRAN POWITALNY
@@ -263,7 +289,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             {[
               ['📱', 'Twój telefon = terminal'],
               ['💳', 'Klient przykłada kartę'],
-              ['⚡', 'Pieniądze od razu na koncie'],
+              ['⚡', 'Automatyczna wypłata na konto'],
               ['📊', 'Statystyki w czasie rzeczywistym'],
             ].map(([icon, text], i) => (
               <View key={i} style={styles.featureRow}>
@@ -286,6 +312,11 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           >
             <Text style={styles.secondaryBtnText}>Mam już konto — zaloguj się</Text>
           </TouchableOpacity>
+
+          <Text style={styles.taxNote}>
+            Napiwki stanowią Twój przychód i podlegają opodatkowaniu PIT. Korzystając z aplikacji akceptujesz{' '}
+            <Text style={styles.taxNoteLink}>Regulamin</Text>.
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -362,6 +393,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
               autoCorrect={false}
               value={firstName}
               onChangeText={setFirstName}
+              accessibilityLabel="Imię"
             />
             <TextInput
               style={[styles.emailInput, { flex: 1, marginBottom: 0 }]}
@@ -371,6 +403,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
               autoCorrect={false}
               value={lastName}
               onChangeText={setLastName}
+              accessibilityLabel="Nazwisko"
             />
           </View>
 
@@ -383,6 +416,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             autoCorrect={false}
             value={email}
             onChangeText={setEmail}
+            accessibilityLabel="Adres email"
           />
           <TextInput
             style={styles.emailInput}
@@ -393,6 +427,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             autoCorrect={false}
             value={password}
             onChangeText={setPassword}
+            accessibilityLabel="Hasło"
           />
 
           {/* Zgoda na regulamin — wymóg RODO */}
@@ -433,6 +468,13 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             Stripe to bezpieczna platforma płatności.{'\n'}
             Twoje dane są chronione przez Stripe (licencja EMI UE).
           </Text>
+
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => setStep('login')}
+          >
+            <Text style={styles.secondaryBtnText}>Mam już konto — zaloguj się</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -460,6 +502,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             autoCorrect={false}
             value={email}
             onChangeText={setEmail}
+            accessibilityLabel="Adres email"
           />
           <TextInput
             style={styles.emailInput}
@@ -470,12 +513,13 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             autoCorrect={false}
             value={password}
             onChangeText={setPassword}
+            accessibilityLabel="Hasło"
           />
 
           <TouchableOpacity
-            style={[styles.primaryBtn, (loading || !email.includes('@') || !password) && styles.btnDisabled]}
+            style={[styles.primaryBtn, (loading || !isValidEmail(email) || !password) && styles.btnDisabled]}
             onPress={loginWithEmail}
-            disabled={loading || !email.includes('@') || !password}
+            disabled={loading || !isValidEmail(email) || !password}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -533,7 +577,11 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
 
           <TouchableOpacity
             style={styles.secondaryBtn}
-            onPress={connectStripe}
+            onPress={() => {
+              if (onboardingUrl) {
+                navigation.navigate('StripeWebView', { url: onboardingUrl, onDone: () => checkStripeStatus() });
+              }
+            }}
           >
             <Text style={styles.secondaryBtnText}>Otwórz Stripe ponownie</Text>
           </TouchableOpacity>
@@ -564,6 +612,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             autoCorrect={false}
             value={password}
             onChangeText={setPassword}
+            accessibilityLabel="Nowe hasło"
           />
 
           <TouchableOpacity
@@ -746,6 +795,18 @@ const styles = StyleSheet.create({
     color: '#c084fc',
     fontSize: 14,
     fontWeight: '700',
+  },
+  taxNote: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.35)',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 16,
+    paddingHorizontal: 16,
+  },
+  taxNoteLink: {
+    color: 'rgba(192,132,252,0.6)',
+    textDecorationLine: 'underline',
   },
   prepareList: {
     width: '100%',

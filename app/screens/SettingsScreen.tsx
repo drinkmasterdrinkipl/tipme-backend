@@ -11,11 +11,13 @@ import {
   ScrollView, Switch, Alert, ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import { C } from '../theme';
 import { useAppContext } from '../AppContext';
 
 export default function SettingsScreen({ navigation }: any) {
   const { onLogout } = useAppContext();
+  const { disconnectReader } = useStripeTerminal();
   const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -25,11 +27,14 @@ export default function SettingsScreen({ navigation }: any) {
   }, []);
 
   const load = async () => {
-    const enabled = await AsyncStorage.getItem('tapToPayEnabled');
-    const userEmail = await AsyncStorage.getItem('userEmail');
-    setTapToPayEnabled(enabled === 'true');
-    setEmail(userEmail || '');
-    setLoading(false);
+    try {
+      const enabled = await AsyncStorage.getItem('tapToPayEnabled');
+      const userEmail = await AsyncStorage.getItem('userEmail');
+      setTapToPayEnabled(enabled === 'true');
+      setEmail(userEmail || '');
+    } catch { /* ignoruj błąd odczytu */ } finally {
+      setLoading(false);
+    }
   };
 
   const toggleTapToPay = async (value: boolean) => {
@@ -69,11 +74,12 @@ export default function SettingsScreen({ navigation }: any) {
           text: 'Wyloguj',
           style: 'destructive',
           onPress: async () => {
+            await disconnectReader().catch(() => {});
             await AsyncStorage.multiRemove([
               'stripeAccountId', 'userEmail', 'stripeLocationId',
               'tapToPayEnabled', 'tapToPayWelcomeShown', 'tapToPayEducationShown',
               'authToken',
-            ]);
+            ]).catch(() => {});
             onLogout();
           },
         },
@@ -130,7 +136,7 @@ export default function SettingsScreen({ navigation }: any) {
             {
               icon: '💳',
               title: 'Karty zbliżeniowe',
-              desc: 'Klient przykłada kartę do tylnej części iPhone\'a i trzyma przez 1-2 sekundy.',
+              desc: 'Klient przykłada kartę do przedniej części iPhone\'a i trzyma przez 1-2 sekundy.',
             },
             {
               icon: '📱',
@@ -185,7 +191,7 @@ export default function SettingsScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        <Text style={s.version}>Tip For Me v1.0 · Napiwki online</Text>
+        <Text style={s.version}>Tip For Me v1.0 · Autor: Adrian Chwaściński</Text>
       </ScrollView>
     </SafeAreaView>
   );

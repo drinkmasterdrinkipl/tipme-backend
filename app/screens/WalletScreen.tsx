@@ -1,5 +1,5 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, RefreshControl, ScrollView,
@@ -10,7 +10,7 @@ import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
-const DEMO_MODE = false;
+const DEMO_MODE = false; // NIGDY nie ustawiaj na true w produkcji — pokazuje fałszywe dane
 const DEMO_PAYOUTS = [
   { id: 'po_1', amount: 320, currency: 'pln', arrival_date: Date.now()/1000 - 86400, status: 'paid' },
   { id: 'po_2', amount: 185, currency: 'pln', arrival_date: Date.now()/1000 - 86400*7, status: 'paid' },
@@ -26,6 +26,7 @@ export default function WalletScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [payouts, setPayouts] = useState<any[]>(DEMO_MODE ? DEMO_PAYOUTS : []);
   const [loadError, setLoadError] = useState('');
+  const mountedRef = useRef(true);
 
   const loadBalance = useCallback(async () => {
     if (DEMO_MODE) return;
@@ -39,34 +40,41 @@ export default function WalletScreen() {
       ]);
       let balFailed = true;
       if (balResult.status === 'fulfilled') {
-        const balData = await balResult.value.json();
-        if (!balData.error) {
-          setAvailable(balData.available);
-          setPending(balData.pending);
-          balFailed = false;
+        if (balResult.value.ok) {
+          const balData = await balResult.value.json();
+          if (!balData.error && mountedRef.current) {
+            setAvailable(balData.available);
+            setPending(balData.pending);
+            balFailed = false;
+          }
         }
       }
-      if (payoutsResult.status === 'fulfilled') {
+      if (payoutsResult.status === 'fulfilled' && payoutsResult.value.ok && mountedRef.current) {
         const payoutsData = await payoutsResult.value.json();
         setPayouts(payoutsData.payouts || []);
       }
-      if (balFailed) setLoadError('Nie udało się pobrać salda. Sprawdź połączenie.');
+      if (balFailed && mountedRef.current) setLoadError('Nie udało się pobrać salda. Sprawdź połączenie.');
     } catch (e: any) {
+      if (!mountedRef.current) return;
       setLoadError(e.message || 'Nie udało się pobrać danych.');
       setAvailable(0);
       setPending(0);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current) { setLoading(false); setRefreshing(false); }
     }
   }, []);
 
-  useEffect(() => { loadBalance(); }, [loadBalance]);
+  useEffect(() => {
+    mountedRef.current = true;
+    loadBalance();
+    return () => { mountedRef.current = false; };
+  }, [loadBalance]);
   useRefreshOnNewDay(useCallback(() => { loadBalance(); }, [loadBalance]));
 
   const onRefresh = () => { setRefreshing(true); loadBalance(); };
 
   const handlePayout = async () => {
+    if (payoutLoading) return;
     if (!available || available < 2) {
       Alert.alert('Brak środków', 'Minimalna kwota wypłaty to 2 zł.');
       return;
@@ -212,7 +220,7 @@ export default function WalletScreen() {
                         <Text style={s.payoutDate}>{date}</Text>
                         <Text style={[s.payoutStatus, { color: statusColor }]}>{statusLabel}</Text>
                       </View>
-                      <Text style={s.payoutAmount}>+{p.amount.toFixed(2)} zł</Text>
+                      <Text style={s.payoutAmount}>+{(p.amount ?? 0).toFixed(2)} zł</Text>
                     </View>
                   );
                 })}

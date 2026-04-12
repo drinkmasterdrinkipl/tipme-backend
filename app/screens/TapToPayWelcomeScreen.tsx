@@ -20,21 +20,15 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
   const handleEnable = async () => {
     setLoading(true);
     try {
-      await AsyncStorage.setItem('tapToPayEnabled', 'true');
       await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
-      navigation.navigate('TapToPayEducation', { onComplete });
+      navigation.replace('TapToPayEducation', { onComplete });
     } finally {
       setLoading(false);
     }
   };
 
   const handleSkip = async () => {
-    await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
-    if (onComplete) {
-      onComplete();
-    } else {
-      navigation.navigate('Main');
-    }
+    navigation.goBack();
   };
 
   return (
