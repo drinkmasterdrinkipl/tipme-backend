@@ -430,6 +430,14 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             accessibilityLabel="Hasło"
           />
 
+          {/* Prowizja platformy — wymóg Stripe (application_fee disclosure) */}
+          <View style={styles.feeBox}>
+            <Text style={styles.feeTitle}>Prowizja platformy: 5%</Text>
+            <Text style={styles.feeDesc}>
+              Tip For Me pobiera 5% od każdego napiwku jako opłatę za usługę. Pozostałe środki trafiają automatycznie na Twoje konto bankowe.
+            </Text>
+          </View>
+
           {/* Zgoda na regulamin — wymóg RODO */}
           <TouchableOpacity
             style={styles.termsRow}
@@ -448,7 +456,11 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
               <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tipme.drinki.pl/polityka-prywatnosci')}>
                 Politykę Prywatności
               </Text>
-              {' '}Tip For Me oraz przetwarzanie danych osobowych.
+              {' '}Tip For Me, w tym prowizję 5% oraz przetwarzanie danych osobowych przez{' '}
+              <Text style={styles.termsLink} onPress={() => Linking.openURL('https://stripe.com/pl/privacy')}>
+                Stripe
+              </Text>
+              .
             </Text>
           </TouchableOpacity>
 
@@ -782,6 +794,26 @@ const styles = StyleSheet.create({
     color: '#c084fc',
     fontWeight: '700',
     textDecorationLine: 'underline',
+  },
+  feeBox: {
+    width: '100%',
+    backgroundColor: 'rgba(168,85,247,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.2)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  feeTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#c084fc',
+    marginBottom: 4,
+  },
+  feeDesc: {
+    fontSize: 12,
+    color: '#555',
+    lineHeight: 18,
   },
   secondaryBtn: {
     marginTop: 14,
