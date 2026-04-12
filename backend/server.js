@@ -96,7 +96,7 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 
 // CORS — tylko znane originy
-const allowedOrigins = ['https://tipme.drinki.pl', 'https://tipme-backend-2rcv.onrender.com'];
+const allowedOrigins = ['https://tipforme.app', 'https://tipme-backend-2rcv.onrender.com'];
 app.use(cors({
   origin: (origin, callback) => {
     // Przepuść requesty bez origina (aplikacja mobilna) lub ze znanych domen
