@@ -187,9 +187,17 @@ app.post('/api/create-connected-account', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
 
     const accountData = {
-      type: 'express',
-      email: email.toLowerCase().trim(),
+      // Accounts v2 — jawnie Express dashboard (nie Standard/full)
+      // Stripe zbiera KYC zamiast nas — kelner podaje tylko minimum (imię, konto bankowe)
+      // Bez pola "business name" wymaganego przy Standard/dashboard:full
+      controller: {
+        stripe_dashboard: { type: 'express' }, // Express Dashboard dla kelnera
+        requirement_collection: 'stripe',       // Stripe odpowiada za zbieranie KYC
+        losses: { payments: 'stripe' },
+        fees: { payer: 'account' },             // connected account płaci Stripe fees
+      },
       country: 'PL',
+      email: email.toLowerCase().trim(),
       business_type: 'individual',
       business_profile: {
         // Unikalna nazwa na podstawie imienia/nazwiska — zapobiega flagowaniu przez Stripe
@@ -274,7 +282,8 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Nieprawidłowe hasło' });
     }
 
-    const token = match.charges_enabled ? createToken(match.id, email) : null;
+    // Token wydawany zawsze gdy hasło poprawne — niezależnie od statusu Stripe
+    const token = createToken(match.id, email);
 
     res.json({
       accountId: match.id,
@@ -317,7 +326,7 @@ app.post('/api/auth/set-password', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     await stripe.accounts.update(accountId, { metadata: { password_hash: passwordHash } });
 
-    const token = account.charges_enabled ? createToken(accountId, account.email) : null;
+    const token = createToken(accountId, account.email);
     res.json({
       accountId,
       chargesEnabled: account.charges_enabled,
