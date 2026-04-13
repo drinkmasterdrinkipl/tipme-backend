@@ -5,6 +5,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const nodemailer = require('nodemailer');
 const bcrypt = require('bcryptjs');
@@ -117,6 +118,11 @@ app.use('/api/create-connected-account', accountLimiter);
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: 'Za dużo prób logowania. Poczekaj 15 minut.' } });
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/set-password', loginLimiter);
+
+// Limit na reset hasła — zapobiega spamowaniu emaili i enumeracji kont
+const forgotPasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: { error: 'Za dużo prób. Poczekaj 15 minut.' } });
+app.use('/api/auth/forgot-password', forgotPasswordLimiter);
+app.use('/api/auth/reset-password', loginLimiter);
 
 // Limit na wysyłanie emaili — zapobiega spamowaniu przez skompromitowany token
 const receiptLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, message: { error: 'Zbyt wiele potwierdzeń. Poczekaj godzinę.' } });
@@ -356,6 +362,213 @@ app.post('/api/auth/set-password', async (req, res) => {
       token,
     });
   } catch (error) {
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+// ============================================
+// AUTH — Reset hasła (krok 1: wyślij email)
+// ============================================
+app.post('/api/auth/forgot-password', async (req, res) => {
+  // Zawsze zwracamy tę samą odpowiedź — nie ujawniamy czy email istnieje w systemie
+  const safeOk = () => res.json({ message: 'Jeśli konto istnieje, wysłaliśmy link resetujący na podany email.' });
+
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      return res.status(400).json({ error: 'Nieprawidłowy adres email' });
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const account = await findStripeAccountByEmail(normalizedEmail);
+    // Brak konta lub konto bez hasła (nie nasze) — zwróć sukces bez wysyłania
+    if (!account || !account.metadata?.password_hash) return safeOk();
+
+    // Generuj losowy nonce (32 bajty = 64 hex znaków)
+    const nonce = crypto.randomBytes(32).toString('hex');
+    const nonceHash = crypto.createHash('sha256').update(nonce).digest('hex');
+    const expiresAt = Date.now() + 60 * 60 * 1000; // 1 godzina
+
+    // Zapisz hash nonce + czas wygaśnięcia w Stripe metadata (NIE surowy nonce)
+    await stripe.accounts.update(account.id, {
+      metadata: {
+        reset_nonce_hash: nonceHash,
+        reset_nonce_expires: String(expiresAt),
+      },
+    });
+
+    // Podpisz JWT z accountId + surowy nonce (expiry 1h) — token do emaila
+    const resetToken = jwt.sign(
+      { accountId: account.id, nonce, sub: 'password-reset' },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    const resetLink = `tipforme://reset-password?token=${encodeURIComponent(resetToken)}`;
+
+    const html = `
+<!DOCTYPE html>
+<html lang="pl">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#0c0a13;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0c0a13;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+
+        <!-- Logo -->
+        <tr><td align="center" style="padding-bottom:32px;">
+          <div style="font-size:36px;margin-bottom:8px;">💜</div>
+          <div style="font-size:22px;font-weight:900;color:#a855f7;letter-spacing:-0.5px;">Tip For Me</div>
+        </td></tr>
+
+        <!-- Karta główna -->
+        <tr><td style="background:#13111c;border:1px solid rgba(168,85,247,0.15);border-radius:20px;padding:36px 32px;">
+
+          <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#f0eef5;letter-spacing:-0.5px;">
+            Reset hasła
+          </h1>
+          <p style="margin:0 0 28px;font-size:15px;color:#777;line-height:1.6;">
+            Otrzymaliśmy prośbę o reset hasła do Twojego konta.<br>
+            Kliknij przycisk poniżej, aby ustawić nowe hasło.
+          </p>
+
+          <!-- Przycisk -->
+          <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+            <tr><td align="center" style="background:#a855f7;border-radius:14px;">
+              <a href="${resetLink}"
+                 style="display:inline-block;padding:16px 36px;font-size:16px;font-weight:800;color:#ffffff;text-decoration:none;letter-spacing:-0.3px;">
+                Ustaw nowe hasło →
+              </a>
+            </td></tr>
+          </table>
+
+          <!-- Bezpieczeństwo -->
+          <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:12px;padding:16px;margin-bottom:24px;">
+            <p style="margin:0;font-size:13px;color:#666;line-height:1.6;">
+              🔒 <strong style="color:#888;">Link jest jednorazowy i wygasa po 1 godzinie.</strong><br>
+              Jeśli nie prosiłeś o reset hasła, zignoruj tę wiadomość — Twoje konto jest bezpieczne.
+            </p>
+          </div>
+
+          <!-- Fallback URL -->
+          <p style="margin:0;font-size:11px;color:#444;line-height:1.6;word-break:break-all;">
+            Jeśli przycisk nie działa, skopiuj ten link i otwórz go na urządzeniu z aplikacją Tip For Me:<br>
+            <span style="color:#7c3aed;">${resetLink}</span>
+          </p>
+
+        </td></tr>
+
+        <!-- Stopka -->
+        <tr><td align="center" style="padding-top:24px;">
+          <p style="margin:0;font-size:12px;color:#333;line-height:1.6;">
+            Tip For Me · Bezpieczne płatności napiwkowe<br>
+            Obsługiwane przez <a href="https://stripe.com" style="color:#555;text-decoration:none;">Stripe</a>
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    await mailer.sendMail({
+      from: `"Tip For Me" <${process.env.SMTP_USER}>`,
+      to: normalizedEmail,
+      subject: 'Reset hasła — Tip For Me',
+      html,
+      text: `Reset hasła — Tip For Me\n\nOtrzymaliśmy prośbę o reset hasła. Otwórz ten link na urządzeniu z aplikacją:\n\n${resetLink}\n\nLink wygasa po 1 godzinie. Jeśli nie prosiłeś o reset, zignoruj tę wiadomość.`,
+    });
+
+    safeOk();
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    // Zwracamy safeOk() nawet przy błędzie — nie ujawniamy czy konto istnieje
+    safeOk();
+  }
+});
+
+// ============================================
+// AUTH — Reset hasła (krok 2: ustaw nowe hasło)
+// ============================================
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Brakuje tokenu resetującego.' });
+    }
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'Hasło musi mieć minimum 8 znaków.' });
+    }
+
+    // Zweryfikuj JWT (podpis + expiry)
+    let payload;
+    try {
+      payload = jwt.verify(token, JWT_SECRET);
+    } catch {
+      return res.status(400).json({ error: 'Link wygasł lub jest nieprawidłowy. Poproś o nowy link resetujący.' });
+    }
+
+    if (payload.sub !== 'password-reset' || !payload.accountId || !payload.nonce) {
+      return res.status(400).json({ error: 'Nieprawidłowy link resetujący.' });
+    }
+    if (!validateAccountId(payload.accountId)) {
+      return res.status(400).json({ error: 'Nieprawidłowy link resetujący.' });
+    }
+
+    // Pobierz konto z Stripe — tu zmiana hasła jest FAKTYCZNIE wykonywana
+    let account;
+    try {
+      account = await stripe.accounts.retrieve(payload.accountId);
+    } catch {
+      return res.status(400).json({ error: 'Konto nie istnieje lub zostało usunięte.' });
+    }
+
+    const storedHash = account.metadata?.reset_nonce_hash;
+    const storedExpires = Number(account.metadata?.reset_nonce_expires || '0');
+
+    // Sprawdź czy nonce w ogóle istnieje (może już był użyty)
+    if (!storedHash) {
+      return res.status(400).json({ error: 'Link został już użyty lub wygasł. Poproś o nowy.' });
+    }
+
+    // Sprawdź czy nie wygasł (dodatkowe sprawdzenie poza JWT)
+    if (Date.now() > storedExpires) {
+      return res.status(400).json({ error: 'Link wygasł. Poproś o nowy link resetujący.' });
+    }
+
+    // Porównaj hash nonce — timing-safe (zabezpieczenie przed timing attacks)
+    const expectedHash = crypto.createHash('sha256').update(payload.nonce).digest('hex');
+    let hashesMatch = false;
+    try {
+      hashesMatch = crypto.timingSafeEqual(
+        Buffer.from(storedHash.padEnd(64, '0'), 'hex'),
+        Buffer.from(expectedHash.padEnd(64, '0'), 'hex')
+      ) && storedHash.length === expectedHash.length;
+    } catch {
+      hashesMatch = false;
+    }
+
+    if (!hashesMatch) {
+      return res.status(400).json({ error: 'Nieprawidłowy link resetujący.' });
+    }
+
+    // Hashe się zgadzają — zmień hasło i unieważnij token (jednorazowy)
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+    // Jedno wywołanie Stripe: nowe hasło + wyczyszczony nonce
+    await stripe.accounts.update(payload.accountId, {
+      metadata: {
+        password_hash: newPasswordHash,
+        reset_nonce_hash: '',      // puste string = usuń z metadata Stripe
+        reset_nonce_expires: '',
+      },
+    });
+
+    res.json({ success: true, message: 'Hasło zostało zmienione. Możesz się teraz zalogować.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
     res.status(500).json({ error: safeError(error) });
   }
 });
