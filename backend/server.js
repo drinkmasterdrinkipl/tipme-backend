@@ -191,9 +191,17 @@ app.post('/api/create-connected-account', async (req, res) => {
       return res.status(400).json({ error: 'Hasło musi mieć minimum 8 znaków' });
     }
 
-    // Sprawdź czy konto z tym emailem już istnieje — odrzuć KAŻDE (nie tylko charges_enabled)
+    // Sprawdź czy konto z tym emailem już istnieje
     const found = await findStripeAccountByEmail(email);
     if (found) {
+      // Niedokończona rejestracja (brak details_submitted) — pozwól wznowić
+      if (!found.details_submitted) {
+        return res.status(409).json({
+          error: 'Masz niedokończoną rejestrację. Zaloguj się aby kontynuować.',
+          incompleteRegistration: true,
+        });
+      }
+      // Konto w pełni założone — przekieruj do logowania
       return res.status(409).json({
         error: 'Konto z tym emailem już istnieje. Użyj opcji "Mam już konto — zaloguj się".',
       });
@@ -306,11 +314,26 @@ app.post('/api/auth/login', async (req, res) => {
     // Token wydawany zawsze gdy hasło poprawne — niezależnie od statusu Stripe
     const token = createToken(match.id, email);
 
+    // Niedokończony onboarding — wygeneruj świeży link do Stripe
+    let onboardingUrl = null;
+    if (!match.details_submitted) {
+      try {
+        const accountLink = await stripe.accountLinks.create({
+          account: match.id,
+          refresh_url: `${process.env.APP_URL}/stripe/refresh`,
+          return_url: `${process.env.APP_URL}/stripe/success`,
+          type: 'account_onboarding',
+        });
+        onboardingUrl = accountLink.url;
+      } catch { /* nie blokuj logowania jeśli link się nie wygeneruje */ }
+    }
+
     res.json({
       accountId: match.id,
       chargesEnabled: match.charges_enabled,
       detailsSubmitted: match.details_submitted,
       token,
+      ...(onboardingUrl && { onboardingUrl }),
     });
   } catch (error) {
     res.status(500).json({ error: safeError(error) });
