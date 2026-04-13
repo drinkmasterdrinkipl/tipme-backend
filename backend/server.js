@@ -380,8 +380,23 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
     const normalizedEmail = email.toLowerCase().trim();
 
-    const account = await findStripeAccountByEmail(normalizedEmail);
-    // Brak konta lub konto bez hasła (nie nasze) — zwróć sukces bez wysyłania
+    // Użyj WSZYSTKICH kont i posortuj tak samo jak login — charges_enabled pierwszy
+    const accounts = await findAllStripeAccountsByEmail(normalizedEmail);
+    if (!accounts.length) return safeOk();
+
+    const sorted = accounts.sort((a, b) => {
+      if (a.charges_enabled && !b.charges_enabled) return -1;
+      if (!a.charges_enabled && b.charges_enabled) return 1;
+      if (a.details_submitted && !b.details_submitted) return -1;
+      if (!a.details_submitted && b.details_submitted) return 1;
+      return 0;
+    });
+
+    // Preferuj aktywne konto z hasłem
+    const account = sorted.find(a => a.charges_enabled && a.metadata?.password_hash)
+      || sorted.find(a => a.metadata?.password_hash)
+      || sorted[0];
+
     if (!account || !account.metadata?.password_hash) return safeOk();
 
     // Generuj losowy nonce (32 bajty = 64 hex znaków)
