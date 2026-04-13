@@ -711,6 +711,7 @@ app.post('/api/create-payment-intent', authenticateToken, async (req, res) => {
         capture_method: 'automatic',
         application_fee_amount: applicationFee,
         description: 'Tip For Me - napiwek',
+        statement_descriptor_suffix: 'Tip For Me',
       },
       {
         stripeAccount: stripeAccountId,
@@ -1100,7 +1101,7 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
   }
 });
 
-// Endpoint /api/payout usunięty — wypłaty są automatyczne (schedule: weekly, poniedziałek)
+// Endpoint /api/payout usunięty — wypłaty są automatyczne (schedule: weekly, piątek)
 // Stripe sam przelewa dostępne środki co piątek na konto bankowe użytkownika
 
 
