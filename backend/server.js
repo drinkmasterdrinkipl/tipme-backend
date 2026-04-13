@@ -117,7 +117,6 @@ app.use('/api/create-connected-account', accountLimiter);
 // Limit na logowanie — zapobiega brute-force atakowi na hasła
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: 'Za dużo prób logowania. Poczekaj 15 minut.' } });
 app.use('/api/auth/login', loginLimiter);
-app.use('/api/auth/set-password', loginLimiter);
 
 // Limit na reset hasła — zapobiega spamowaniu emaili i enumeracji kont
 const forgotPasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: { error: 'Za dużo prób. Poczekaj 15 minut.' } });
@@ -301,10 +300,10 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (!match && needsPassword) {
+      // Nie ujawniamy accountId — zamiast tego kierujemy na reset hasła przez email
       return res.status(403).json({
-        error: 'Konto wymaga ustawienia hasła.',
-        needsPassword: true,
-        accountId: sorted[0].id,
+        error: 'To konto nie ma jeszcze ustawionego hasła. Użyj opcji "Zapomniałeś hasła?" aby ustawić hasło przez email.',
+        needsPasswordReset: true,
       });
     }
     if (!match) {
@@ -330,41 +329,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // ============================================
 // AUTH — Ustawienie hasła dla kont bez hasła (migracja)
-// ============================================
-app.post('/api/auth/set-password', async (req, res) => {
-  try {
-    const { accountId, email, password } = req.body;
-    if (!accountId || !email || !password || password.length < 8) {
-      return res.status(400).json({ error: 'Hasło musi mieć minimum 8 znaków' });
-    }
-    if (!validateAccountId(accountId)) {
-      return res.status(400).json({ error: 'Nieprawidłowe ID konta' });
-    }
-
-    const account = await stripe.accounts.retrieve(accountId);
-
-    // Weryfikuj że email zgadza się z kontem — zapobiega ustawieniu hasła na cudzym koncie
-    if (!account.email || account.email.toLowerCase() !== email.toLowerCase().trim()) {
-      return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
-    }
-
-    if (account.metadata?.password_hash) {
-      return res.status(409).json({ error: 'Konto ma już ustawione hasło. Użyj logowania.' });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 12);
-    await stripe.accounts.update(accountId, { metadata: { password_hash: passwordHash } });
-
-    const token = createToken(accountId, account.email);
-    res.json({
-      accountId,
-      chargesEnabled: account.charges_enabled,
-      token,
-    });
-  } catch (error) {
-    res.status(500).json({ error: safeError(error) });
-  }
-});
+// set-password usunięty — zastąpiony przez forgot-password (weryfikacja przez email)
 
 // ============================================
 // AUTH — Reset hasła (krok 1: wyślij email)
