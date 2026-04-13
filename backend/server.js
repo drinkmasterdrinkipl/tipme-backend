@@ -246,6 +246,7 @@ app.post('/api/create-connected-account', async (req, res) => {
       refresh_url: `https://tipforme.app/stripe/success.html`,
       return_url: `https://tipforme.app/stripe/success.html`,
       type: 'account_onboarding',
+      collection_options: { fields: 'eventually_due' },
     });
 
     res.json({
@@ -323,6 +324,7 @@ app.post('/api/auth/login', async (req, res) => {
           refresh_url: `https://tipforme.app/stripe/success.html`,
           return_url: `https://tipforme.app/stripe/success.html`,
           type: 'account_onboarding',
+          collection_options: { fields: 'eventually_due' },
         });
         onboardingUrl = accountLink.url;
       } catch { /* nie blokuj logowania jeśli link się nie wygeneruje */ }
@@ -1042,6 +1044,7 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
         refresh_url: `https://tipforme.app/stripe/success.html`,
         return_url: `https://tipforme.app/stripe/success.html`,
         type: 'account_onboarding',
+        collection_options: { fields: 'eventually_due' },
       });
       return res.json({ url: accountLink.url, requiresOnboarding: true });
     }
