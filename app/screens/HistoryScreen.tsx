@@ -184,7 +184,7 @@ export default function HistoryScreen() {
             const tx = item as Transaction & { type: 'tx' };
             const isRefunded = refundedIds.has(tx.id);
             const isRefunding = refundingId === tx.id;
-            const canRefund = Date.now() - new Date(tx.created).getTime() < 2 * 24 * 60 * 60 * 1000;
+            const canRefund = Date.now() - new Date(tx.created).getTime() < 24 * 60 * 60 * 1000;
             return (
               <View key={tx.id} style={s.item}>
                 <View style={s.itemLeft}>
