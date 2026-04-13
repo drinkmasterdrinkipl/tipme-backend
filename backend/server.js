@@ -909,8 +909,8 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
     const count          = successful.length;
     const average        = count > 0 ? totalAmount / count : 0;
 
-    // net z Stripe już zawiera potrącenie application_fee (prowizja platformy 5%)
-    // oraz opłaty Stripe Terminal — nie odejmujemy ponownie
+    // t.net ze Stripe zawiera tylko potrącenie opłaty Stripe (t.fee)
+    // application_fee (prowizja platformy 5%) to osobna transakcja — odejmujemy ręcznie
     const platformFee = totalAmount * PLATFORM_FEE_PERCENT;
 
     res.json({
@@ -920,7 +920,7 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
         average,
         stripeFee: totalStripeFee,
         platformFee,
-        net: Math.max(0, totalNet),   // już po wszystkich potrąceniach
+        net: Math.max(0, totalNet - platformFee),
       },
     });
   } catch (error) {
