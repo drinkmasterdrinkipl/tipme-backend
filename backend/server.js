@@ -226,7 +226,7 @@ app.post('/api/create-connected-account', async (req, res) => {
         transfers: { requested: true },
       },
       settings: {
-        payouts: { schedule: { interval: 'weekly', weekly_anchor: 'monday', delay_days: 'minimum' } },
+        payouts: { schedule: { interval: 'weekly', weekly_anchor: 'friday', delay_days: 'minimum' } },
       },
       metadata: { password_hash: passwordHash },
     };
@@ -1101,7 +1101,7 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
 });
 
 // Endpoint /api/payout usunięty — wypłaty są automatyczne (schedule: weekly, poniedziałek)
-// Stripe sam przelewa dostępne środki co poniedziałek na konto bankowe użytkownika
+// Stripe sam przelewa dostępne środki co piątek na konto bankowe użytkownika
 
 
 // Webhook zarejestrowany na górze pliku (przed express.json())
