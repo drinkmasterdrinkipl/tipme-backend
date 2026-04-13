@@ -88,7 +88,7 @@ export default function SuccessScreen({ navigation, route }: any) {
           <View style={s.infoDivider} />
           <View style={s.infoRow}>
             <Text style={s.infoLabel}>WYPŁATA</Text>
-            <Text style={s.infoValue}>1–2 dni robocze</Text>
+            <Text style={s.infoValue}>Co piątek</Text>
           </View>
           <View style={s.infoDivider} />
           <View style={s.infoRow}>

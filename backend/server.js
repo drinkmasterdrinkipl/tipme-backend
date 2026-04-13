@@ -171,10 +171,10 @@ app.use((req, res, next) => {
 
 // ============================================
 // Twoja prowizja (w groszach!)
-// 5% = mnożnik 0.05
+// 6% = mnożnik 0.06
 // Przykład: napiwek 20 zł = 2000 gr → prowizja = 100 gr = 1 zł
 // ============================================
-const PLATFORM_FEE_PERCENT = 0.05; // 5% — prowizja platformy
+const PLATFORM_FEE_PERCENT = 0.06; // 6% — prowizja platformy
 
 // ============================================
 // 1. STRIPE CONNECT — Rejestracja użytkownika
@@ -910,7 +910,7 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
     const average        = count > 0 ? totalAmount / count : 0;
 
     // t.net ze Stripe zawiera tylko potrącenie opłaty Stripe (t.fee)
-    // application_fee (prowizja platformy 5%) to osobna transakcja — odejmujemy ręcznie
+    // application_fee (prowizja platformy 6%) to osobna transakcja — odejmujemy ręcznie
     const platformFee = totalAmount * PLATFORM_FEE_PERCENT;
 
     res.json({

@@ -64,6 +64,7 @@ export default function WalletScreen() {
 
   const onRefresh = () => { setRefreshing(true); loadBalance(); };
 
+
   return (
     <SafeAreaView style={s.root}>
       <ScrollView
@@ -87,23 +88,56 @@ export default function WalletScreen() {
           </View>
         ) : (
           <>
-            {/* Saldo dostępne */}
+            {/* Saldo łączne — główna karta */}
             <View style={s.balanceCard}>
-              <Text style={s.balanceLabel}>DOSTĘPNE SALDO</Text>
+              <Text style={s.balanceLabel}>W DRODZE NA KONTO</Text>
               <Text style={s.balanceAmount}>
-                {available?.toFixed(2)}
+                {((available ?? 0) + (pending ?? 0)).toFixed(2)}
                 <Text style={s.balanceCurr}> zł</Text>
               </Text>
               {(pending ?? 0) > 0 && (
                 <>
                   <View style={s.divider} />
                   <View style={s.pendingRow}>
-                    <Text style={s.pendingLabel}>Oczekujące (w rozliczeniu)</Text>
-                    <Text style={s.pendingValue}>{pending?.toFixed(2)} zł</Text>
+                    <Text style={s.pendingLabel}>Rozliczane przez Stripe</Text>
+                    <Text style={[s.pendingValue, { color: '#F59E0B' }]}>{pending?.toFixed(2)} zł</Text>
+                  </View>
+                </>
+              )}
+              {(available ?? 0) > 0 && (
+                <>
+                  <View style={s.divider} />
+                  <View style={s.pendingRow}>
+                    <Text style={s.pendingLabel}>Wypłacane dziś na konto</Text>
+                    <Text style={[s.pendingValue, { color: '#10B981' }]}>{available?.toFixed(2)} zł</Text>
                   </View>
                 </>
               )}
             </View>
+
+            {/* Szczegóły konta */}
+            <TouchableOpacity style={s.dashboardBtn} onPress={() => navigation.navigate('AccountDetails')} activeOpacity={0.75}>
+              <View style={s.dashboardBtnInner}>
+                <View style={s.dashboardBtnLeft}>
+                  <Text style={s.dashboardBtnIcon}>🏦</Text>
+                  <View>
+                    <Text style={s.dashboardBtnText}>Szczegóły konta</Text>
+                    <Text style={s.dashboardBtnSub}>Konto bankowe, status weryfikacji</Text>
+                  </View>
+                </View>
+                <Text style={s.dashboardBtnArrow}>→</Text>
+              </View>
+            </TouchableOpacity>
+
+
+            {/* Info o pierwszej wypłacie */}
+            {payouts.length === 0 && (
+              <View style={s.firstPayoutBox}>
+                <Text style={s.firstPayoutText}>
+                  ℹ️  Pierwsza wypłata może zająć do 7 dni roboczych — Stripe weryfikuje nowe konto.
+                </Text>
+              </View>
+            )}
 
             {/* Info o automatycznych wypłatach */}
             <View style={s.autoPayoutBox}>
@@ -111,28 +145,10 @@ export default function WalletScreen() {
               <View style={s.autoPayoutText}>
                 <Text style={s.autoPayoutTitle}>Wypłaty automatyczne</Text>
                 <Text style={s.autoPayoutDesc}>
-                  Środki trafiają na Twoje konto bankowe automatycznie — bez żadnej akcji z Twojej strony.
+                  Każdy napiwek jest rozliczany przez Stripe (zwykle 3 dni robocze) i automatycznie wypłacany co piątek na Twoje konto bankowe — bez żadnej akcji z Twojej strony.
                 </Text>
               </View>
             </View>
-
-            {/* Info o oczekujących */}
-            {(pending ?? 0) > 0 && (
-              <View style={s.infoBox}>
-                <Text style={s.infoText}>
-                  Oczekujące środki ({pending?.toFixed(2)} zł) są w trakcie rozliczenia przez Stripe. Zwykle zajmuje to 2 dni robocze.
-                </Text>
-              </View>
-            )}
-
-            {/* Info o pierwszej wypłacie */}
-            {payouts.length === 0 && (
-              <View style={s.firstPayoutBox}>
-                <Text style={s.firstPayoutText}>
-                  ℹ️  Pierwsza wypłata może zająć do 7 dni roboczych — Stripe weryfikuje nowe konto. Kolejne wypłaty trwają 1–2 dni.
-                </Text>
-              </View>
-            )}
 
             {/* Historia wypłat */}
             {payouts.length > 0 && (
@@ -155,18 +171,10 @@ export default function WalletScreen() {
               </View>
             )}
 
-            {/* Szczegóły konta */}
-            <TouchableOpacity style={s.dashboardBtn} onPress={() => navigation.navigate('AccountDetails')} activeOpacity={0.8}>
-              <View style={s.dashboardBtnInner}>
-                <Text style={s.dashboardBtnText}>Szczegóły konta</Text>
-                <Text style={s.dashboardBtnSub}>Konto bankowe, status weryfikacji →</Text>
-              </View>
-            </TouchableOpacity>
-
             {/* Informacja prawna */}
             <View style={s.legalBox}>
               <Text style={s.legalText}>
-                Płatności obsługuje Stripe Payments Europe Ltd. (licencja instytucji pieniądza elektronicznego UE). Środki są automatycznie wypłacane na konto bankowe co dzień. Tip For Me nie przechowuje Twoich środków.
+                Płatności obsługuje Stripe Payments Europe Ltd. (licencja instytucji pieniądza elektronicznego UE). Środki są automatycznie wypłacane na konto bankowe. Tip For Me nie przechowuje Twoich środków.
               </Text>
             </View>
           </>
@@ -185,8 +193,7 @@ const s = StyleSheet.create({
   balanceCard: {
     backgroundColor: C.card, borderRadius: 24,
     borderWidth: 1, borderColor: C.cardBorder,
-    padding: 28, marginBottom: 16,
-    alignItems: 'center',
+    padding: 28, marginBottom: 16, alignItems: 'center',
   },
   balanceLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 2.5, color: C.text3, marginBottom: 10 },
   balanceAmount: { fontSize: 56, fontWeight: '900', color: C.text1, letterSpacing: -2, lineHeight: 60 },
@@ -205,12 +212,6 @@ const s = StyleSheet.create({
   autoPayoutText: { flex: 1 },
   autoPayoutTitle: { fontSize: 14, fontWeight: '800', color: C.success ?? '#22c55e', marginBottom: 4 },
   autoPayoutDesc: { fontSize: 12, color: C.text3, lineHeight: 18 },
-  infoBox: {
-    backgroundColor: 'rgba(245,158,11,0.07)', borderRadius: 14,
-    borderWidth: 1, borderColor: 'rgba(245,158,11,0.15)',
-    padding: 14, marginBottom: 16,
-  },
-  infoText: { fontSize: 12, color: C.gold, lineHeight: 18 },
   payoutsSection: {
     width: '100%', marginBottom: 14,
     backgroundColor: C.card, borderRadius: 20,
@@ -225,12 +226,15 @@ const s = StyleSheet.create({
   payoutStatus: { fontSize: 11, fontWeight: '700', marginTop: 2 },
   payoutAmount: { fontSize: 16, fontWeight: '800', color: C.text1 },
   dashboardBtn: {
-    borderRadius: 18, borderWidth: 1, borderColor: C.cardBorder,
-    backgroundColor: C.card, padding: 18, marginBottom: 24,
+    borderRadius: 18, borderWidth: 1.5, borderColor: C.cardBorderActive,
+    backgroundColor: C.primaryFaint, padding: 18, marginBottom: 16,
   },
-  dashboardBtnInner: { alignItems: 'center' },
-  dashboardBtnText: { color: C.primaryLight, fontSize: 15, fontWeight: '700' },
-  dashboardBtnSub: { color: C.text3, fontSize: 12, marginTop: 4 },
+  dashboardBtnInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dashboardBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  dashboardBtnIcon: { fontSize: 26 },
+  dashboardBtnText: { color: C.primaryLight, fontSize: 16, fontWeight: '800' },
+  dashboardBtnSub: { color: C.text3, fontSize: 12, marginTop: 2 },
+  dashboardBtnArrow: { fontSize: 20, color: C.primaryLight, fontWeight: '700' },
   firstPayoutBox: {
     backgroundColor: 'rgba(99,102,241,0.07)', borderRadius: 14,
     borderWidth: 1, borderColor: 'rgba(99,102,241,0.2)',
