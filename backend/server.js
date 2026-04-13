@@ -283,24 +283,17 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
     let match = null;
-    let needsPassword = false;
 
     for (const account of sorted) {
       const hash = account.metadata?.password_hash;
-      if (!hash) {
-        if (!match) needsPassword = true;
-        continue;
-      }
+      if (!hash) continue; // stare konto testowe bez hasła — pomijamy
       const valid = await bcrypt.compare(password, hash);
-      if (valid) {
-        match = account;
-        needsPassword = false;
-        break;
-      }
+      if (valid) { match = account; break; }
     }
 
-    if (!match && needsPassword) {
-      // Nie ujawniamy accountId — zamiast tego kierujemy na reset hasła przez email
+    // Konto z charges_enabled nie ma hasła — powinno użyć resetu
+    const bestAccount = sorted[0];
+    if (!match && bestAccount && !bestAccount.metadata?.password_hash) {
       return res.status(403).json({
         error: 'To konto nie ma jeszcze ustawionego hasła. Użyj opcji "Zapomniałeś hasła?" aby ustawić hasło przez email.',
         needsPasswordReset: true,
