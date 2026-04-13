@@ -769,6 +769,16 @@ app.post('/api/refund', authenticateToken, async (req, res) => {
     if (req.user.accountId !== stripeAccountId) {
       return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
     }
+
+    // Blokuj zwroty starsze niż 2 dni — po tym czasie napiwek jest już wypłacony
+    // na konto bankowe i zwrot mógłby wprowadzić saldo na minus (ryzyko dla platformy)
+    const charge = await stripe.charges.retrieve(chargeId, { stripeAccount: stripeAccountId });
+    const ageMs = Date.now() - charge.created * 1000;
+    const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+    if (ageMs > TWO_DAYS_MS) {
+      return res.status(400).json({ error: 'Zwrot możliwy tylko w ciągu 48h od transakcji. Po tym czasie napiwek jest już wypłacony na konto bankowe.' });
+    }
+
     const refund = await stripe.refunds.create(
       { charge: chargeId },
       { stripeAccount: stripeAccountId }

@@ -1,12 +1,12 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 20;
 
 interface Transaction { id: string; amount: number; paymentMethod: string; created: string; status: string; }
 type ListItem = { type: 'header'; label: string } | { type: 'tx' } & Transaction;
@@ -54,6 +54,8 @@ export default function HistoryScreen() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundedIds, setRefundedIds] = useState<Set<string>>(new Set());
   const mountedRef = useRef(true);
 
   const loadTransactions = useCallback(async () => {
@@ -98,6 +100,42 @@ export default function HistoryScreen() {
     return m;
   }, [pageTxs]);
 
+  const handleRefund = useCallback((tx: Transaction) => {
+    Alert.alert(
+      'Zwróć napiwek',
+      `Czy na pewno chcesz zwrócić ${tx.amount.toFixed(2)} zł? Środki wrócą na kartę klienta w ciągu 5–10 dni roboczych.`,
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        {
+          text: 'Zwróć',
+          style: 'destructive',
+          onPress: async () => {
+            if (!mountedRef.current) return;
+            setRefundingId(tx.id);
+            try {
+              const accountId = await AsyncStorage.getItem('stripeAccountId');
+              if (!accountId) throw new Error('Brak ID konta');
+              const res = await apiFetch(`${API_URL}/api/refund`, {
+                method: 'POST',
+                body: JSON.stringify({ chargeId: tx.id, stripeAccountId: accountId }),
+              });
+              const data = await res.json();
+              if (!res.ok || data.error) throw new Error(data.error || 'Błąd serwera');
+              if (mountedRef.current) {
+                setRefundedIds(prev => new Set([...prev, tx.id]));
+                Alert.alert('Zwrot wysłany', `${tx.amount.toFixed(2)} zł zostanie zwrócone na kartę klienta w ciągu 5–10 dni roboczych.`);
+              }
+            } catch (e: any) {
+              if (mountedRef.current) Alert.alert('Błąd zwrotu', e.message || 'Nie udało się wykonać zwrotu. Spróbuj ponownie.');
+            } finally {
+              if (mountedRef.current) setRefundingId(null);
+            }
+          },
+        },
+      ]
+    );
+  }, []);
+
   return (
     <SafeAreaView style={s.root}>
       <View style={s.header}>
@@ -109,7 +147,11 @@ export default function HistoryScreen() {
 
       <View style={s.heroCard}>
         <Text style={s.heroLabel}>ZEBRANO DZIŚ</Text>
-        <Text style={s.heroAmount}>{todayTotal.toFixed(0)}<Text style={s.heroCurr}> zł</Text></Text>
+        {loading ? (
+          <ActivityIndicator color={C.primary} style={{ marginVertical: 12 }} />
+        ) : (
+          <Text style={s.heroAmount}>{todayTotal.toFixed(0)}<Text style={s.heroCurr}> zł</Text></Text>
+        )}
       </View>
 
       <Text style={s.sectionLabel}>TRANSAKCJE</Text>
@@ -140,16 +182,41 @@ export default function HistoryScreen() {
               );
             }
             const tx = item as Transaction & { type: 'tx' };
+            const isRefunded = refundedIds.has(tx.id);
+            const isRefunding = refundingId === tx.id;
+            const canRefund = Date.now() - new Date(tx.created).getTime() < 2 * 24 * 60 * 60 * 1000;
             return (
               <View key={tx.id} style={s.item}>
                 <View style={s.itemLeft}>
-                  <View style={s.itemIcon}><Text style={s.itemIconText}>↑</Text></View>
+                  <View style={[s.itemIcon, isRefunded && s.itemIconRefunded]}>
+                    <Text style={[s.itemIconText, isRefunded && s.itemIconTextRefunded]}>
+                      {isRefunded ? '↩' : '↑'}
+                    </Text>
+                  </View>
                   <View>
                     <Text style={s.itemMethod}>{tx.paymentMethod}</Text>
                     <Text style={s.itemTime}>{timeMap[tx.id]}</Text>
                   </View>
                 </View>
-                <Text style={s.itemAmount}>+{tx.amount.toFixed(0)} zł</Text>
+                <View style={s.itemRight}>
+                  {isRefunded ? (
+                    <>
+                      <Text style={s.itemAmountRefunded}>+{tx.amount.toFixed(0)} zł</Text>
+                      <Text style={s.refundedBadge}>Zwrócono</Text>
+                    </>
+                  ) : isRefunding ? (
+                    <ActivityIndicator size="small" color={C.primary} />
+                  ) : (
+                    <>
+                      <Text style={s.itemAmount}>+{tx.amount.toFixed(0)} zł</Text>
+                      {canRefund && (
+                        <TouchableOpacity style={s.refundBtn} onPress={() => handleRefund(tx)}>
+                          <Text style={s.refundBtnText}>Zwróć</Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  )}
+                </View>
               </View>
             );
           })}
@@ -220,10 +287,21 @@ const s = StyleSheet.create({
     backgroundColor: C.successFaint, borderWidth: 1,
     borderColor: 'rgba(16,185,129,0.2)', alignItems: 'center', justifyContent: 'center',
   },
+  itemIconRefunded: { backgroundColor: 'rgba(248,113,113,0.08)', borderColor: 'rgba(248,113,113,0.2)' },
   itemIconText: { fontSize: 16, color: C.success, fontWeight: '800' },
+  itemIconTextRefunded: { color: C.error },
   itemMethod: { fontSize: 14, fontWeight: '700', color: C.text1 },
   itemTime: { fontSize: 12, color: C.text3, marginTop: 2 },
+  itemRight: { alignItems: 'flex-end', gap: 4 },
   itemAmount: { fontSize: 18, fontWeight: '900', color: C.success },
+  itemAmountRefunded: { fontSize: 16, fontWeight: '700', color: C.text4, textDecorationLine: 'line-through' },
+  refundedBadge: { fontSize: 10, fontWeight: '700', color: C.text3 },
+  refundBtn: {
+    paddingVertical: 3, paddingHorizontal: 8, borderRadius: 8,
+    borderWidth: 1, borderColor: 'rgba(248,113,113,0.3)',
+    backgroundColor: 'rgba(248,113,113,0.06)',
+  },
+  refundBtnText: { fontSize: 10, fontWeight: '700', color: C.error },
   empty: { alignItems: 'center', marginTop: 80 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: C.text3, marginBottom: 6 },
   emptySub: { fontSize: 13, color: C.text4 },
