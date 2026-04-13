@@ -196,33 +196,23 @@ app.post('/api/create-connected-account', async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
+    const normalizedEmail = email.toLowerCase().trim();
+    const displayName = [firstName, lastName].filter(Boolean).join(' ').trim() || normalizedEmail.split('@')[0];
+
     const accountData = {
-      // Accounts v2 — jawnie Express dashboard (nie Standard/full)
-      // Stripe zbiera KYC zamiast nas — kelner podaje tylko minimum (imię, konto bankowe)
-      // Bez pola "business name" wymaganego przy Standard/dashboard:full
-      controller: {
-        stripe_dashboard: { type: 'express' }, // Express Dashboard dla kelnera
-        requirement_collection: 'stripe',       // Stripe odpowiada za zbieranie KYC
-        losses: { payments: 'stripe' },
-        fees: { payer: 'account' },             // connected account płaci Stripe fees
-      },
+      type: 'express',
       country: 'PL',
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       business_type: 'individual',
       business_profile: {
-        // Unikalna nazwa na podstawie imienia/nazwiska — zapobiega flagowaniu przez Stripe
-        // (dziesiątki kont z identyczną nazwą i URL triggują fraud detection)
-        name: [firstName, lastName].filter(Boolean).join(' ').trim() || email.split('@')[0],
-        mcc: '7299', // MCC 7299 = Personal Services (zbliżone do napiwków)
+        name: displayName,
+        mcc: '7299',
       },
       capabilities: {
         card_payments: { requested: true },
         transfers: { requested: true },
       },
       settings: {
-        // Automatyczna wypłata dzienna — środki trafiają na konto bankowe bez akcji użytkownika
-        // delay_days: 'minimum' = Stripe używa najkrótszego dopuszczalnego okresu dla PL
-        // Polska: 7 dni kalendarzowych dla nowego konta, potem 3 dni robocze domyślnie
         payouts: { schedule: { interval: 'daily', delay_days: 'minimum' } },
       },
       metadata: { password_hash: passwordHash },
@@ -232,7 +222,7 @@ app.post('/api/create-connected-account', async (req, res) => {
       accountData.individual = {
         ...(firstName && { first_name: firstName.trim().slice(0, 50) }),
         ...(lastName && { last_name: lastName.trim().slice(0, 50) }),
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
       };
     }
 
