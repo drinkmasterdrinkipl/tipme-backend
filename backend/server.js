@@ -430,12 +430,6 @@ app.post('/api/auth/forgot-password', async (req, res) => {
             </p>
           </div>
 
-          <!-- Fallback URL -->
-          <p style="margin:0;font-size:11px;color:#444;line-height:1.6;word-break:break-all;">
-            Jeśli przycisk nie działa, skopiuj ten link i otwórz go na urządzeniu z aplikacją Tip For Me:<br>
-            <span style="color:#7c3aed;">${resetLink}</span>
-          </p>
-
         </td></tr>
 
         <!-- Stopka -->
