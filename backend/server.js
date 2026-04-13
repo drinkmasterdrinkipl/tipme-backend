@@ -243,8 +243,8 @@ app.post('/api/create-connected-account', async (req, res) => {
 
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
-      refresh_url: `${process.env.APP_URL}/stripe/refresh`,
-      return_url: `${process.env.APP_URL}/stripe/success`,
+      refresh_url: `https://tipforme.app/stripe/success.html`,
+      return_url: `https://tipforme.app/stripe/success.html`,
       type: 'account_onboarding',
     });
 
@@ -320,8 +320,8 @@ app.post('/api/auth/login', async (req, res) => {
       try {
         const accountLink = await stripe.accountLinks.create({
           account: match.id,
-          refresh_url: `${process.env.APP_URL}/stripe/refresh`,
-          return_url: `${process.env.APP_URL}/stripe/success`,
+          refresh_url: `https://tipforme.app/stripe/success.html`,
+          return_url: `https://tipforme.app/stripe/success.html`,
           type: 'account_onboarding',
         });
         onboardingUrl = accountLink.url;
@@ -1039,8 +1039,8 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
       // Onboarding niekompletny — wyślij z powrotem do formularza Stripe
       const accountLink = await stripe.accountLinks.create({
         account: accountId,
-        refresh_url: `${process.env.APP_URL}/stripe/refresh`,
-        return_url: `${process.env.APP_URL}/stripe/success`,
+        refresh_url: `https://tipforme.app/stripe/success.html`,
+        return_url: `https://tipforme.app/stripe/success.html`,
         type: 'account_onboarding',
       });
       return res.json({ url: accountLink.url, requiresOnboarding: true });
