@@ -754,6 +754,32 @@ app.post('/api/cancel-payment-intent', authenticateToken, async (req, res) => {
 });
 
 // ============================================
+// ZWROT NAPIWKU
+// Tworzy refund na charge w imieniu connected account
+// ============================================
+app.post('/api/refund', authenticateToken, async (req, res) => {
+  try {
+    const { chargeId, stripeAccountId } = req.body;
+    if (!chargeId || !stripeAccountId) {
+      return res.status(400).json({ error: 'Brak chargeId lub stripeAccountId' });
+    }
+    if (!validateAccountId(stripeAccountId)) {
+      return res.status(400).json({ error: 'Nieprawidłowe ID konta' });
+    }
+    if (req.user.accountId !== stripeAccountId) {
+      return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
+    }
+    const refund = await stripe.refunds.create(
+      { charge: chargeId },
+      { stripeAccount: stripeAccountId }
+    );
+    res.json({ refundId: refund.id, status: refund.status });
+  } catch (error) {
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+// ============================================
 // 5. HISTORIA TRANSAKCJI
 // Pobiera ostatnie napiwki użytkownika
 // ============================================
