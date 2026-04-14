@@ -911,7 +911,7 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
     const average        = count > 0 ? totalAmount / count : 0;
 
     // t.net ze Stripe zawiera tylko potrącenie opłaty Stripe (t.fee)
-    // application_fee (prowizja platformy 6%) to osobna transakcja — odejmujemy ręcznie
+    // application_fee (prowizja platformy 7%) to osobna transakcja — odejmujemy ręcznie
     const platformFee = totalAmount * PLATFORM_FEE_PERCENT;
 
     res.json({
