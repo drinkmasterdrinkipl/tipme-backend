@@ -171,10 +171,10 @@ app.use((req, res, next) => {
 
 // ============================================
 // Twoja prowizja (w groszach!)
-// 6% = mnożnik 0.06
-// Przykład: napiwek 20 zł = 2000 gr → prowizja = 100 gr = 1 zł
+// 7% = mnożnik 0.07
+// Przykład: napiwek 20 zł = 2000 gr → prowizja = 140 gr = 1.40 zł
 // ============================================
-const PLATFORM_FEE_PERCENT = 0.06; // 6% — prowizja platformy
+const PLATFORM_FEE_PERCENT = 0.07; // 7% — prowizja platformy
 
 // ============================================
 // 1. STRIPE CONNECT — Rejestracja użytkownika
@@ -686,8 +686,8 @@ app.post('/api/create-payment-intent', authenticateToken, async (req, res) => {
   try {
     const { amount, stripeAccountId } = req.body;
 
-    if (!amount || !Number.isInteger(amount) || amount < 200 || amount > 100000) {
-      return res.status(400).json({ error: 'Minimalna kwota napiwku to 2 zł' });
+    if (!amount || !Number.isInteger(amount) || amount < 500 || amount > 100000) {
+      return res.status(400).json({ error: 'Minimalna kwota napiwku to 5 zł' });
     }
     if (!stripeAccountId || !stripeAccountId.startsWith('acct_')) {
       return res.status(400).json({ error: 'Nieprawidłowe ID konta Stripe' });
