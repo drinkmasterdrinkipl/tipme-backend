@@ -177,6 +177,44 @@ app.use((req, res, next) => {
 const PLATFORM_FEE_PERCENT = 0.07; // 7% — prowizja platformy
 
 // ============================================
+// RATE LIMITING — ochrona przed spamem
+// Zapobiega płaceniu 0.40 zł Per Auth Fee
+// za każde przypadkowe/testowe tapnięcie
+// ============================================
+const PAYMENT_COOLDOWN_MS = 25 * 1000;  // 25 sekund między płatnościami
+const DAILY_PAYMENT_LIMIT = 50;          // max 50 prób dziennie na konto
+
+const paymentLastTime = new Map();  // accountId -> timestamp ostatniej próby
+const paymentDailyCount = new Map(); // accountId -> { count, date }
+
+function checkPaymentRateLimit(accountId) {
+  const now = Date.now();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Cooldown między płatnościami
+  const lastTime = paymentLastTime.get(accountId);
+  if (lastTime && (now - lastTime) < PAYMENT_COOLDOWN_MS) {
+    const secsLeft = Math.ceil((PAYMENT_COOLDOWN_MS - (now - lastTime)) / 1000);
+    return { allowed: false, error: `Poczekaj ${secsLeft} sekund przed kolejną płatnością.` };
+  }
+
+  // Dzienny limit
+  const daily = paymentDailyCount.get(accountId);
+  if (daily && daily.date === todayStr && daily.count >= DAILY_PAYMENT_LIMIT) {
+    return { allowed: false, error: 'Przekroczono dzienny limit transakcji.' };
+  }
+
+  // Aktualizuj liczniki
+  paymentLastTime.set(accountId, now);
+  paymentDailyCount.set(accountId, {
+    date: todayStr,
+    count: (daily && daily.date === todayStr) ? daily.count + 1 : 1,
+  });
+
+  return { allowed: true };
+}
+
+// ============================================
 // 1. STRIPE CONNECT — Rejestracja użytkownika
 // Tworzy konto Stripe dla nowego użytkownika
 // ============================================
@@ -226,7 +264,7 @@ app.post('/api/create-connected-account', async (req, res) => {
         transfers: { requested: true },
       },
       settings: {
-        payouts: { schedule: { interval: 'weekly', weekly_anchor: 'friday', delay_days: 'minimum' } },
+        payouts: { schedule: { interval: 'daily', delay_days: 'minimum' } },
       },
       metadata: { password_hash: passwordHash },
     };
@@ -697,6 +735,12 @@ app.post('/api/create-payment-intent', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
     }
 
+    // Rate limiting — ochrona przed spamem
+    const rateLimit = checkPaymentRateLimit(stripeAccountId);
+    if (!rateLimit.allowed) {
+      return res.status(429).json({ error: rateLimit.error });
+    }
+
     // amount w groszach (np. 2000 = 20 zł)
     const applicationFee = Math.round(amount * PLATFORM_FEE_PERCENT);
 
@@ -938,7 +982,8 @@ const escapeHtml = (str) => String(str)
 
 app.post('/api/send-receipt', authenticateToken, async (req, res) => {
   try {
-    const { email, amount, last4, paymentMethod, date } = req.body;
+    const { email, amount, last4, paymentMethod, date, status } = req.body;
+    const isDeclined = status === 'declined';
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return res.status(400).json({ error: 'Nieprawidłowy adres email' });
@@ -958,11 +1003,41 @@ app.post('/api/send-receipt', authenticateToken, async (req, res) => {
     const safeMethod = escapeHtml(paymentMethod);
     const safeDate = escapeHtml(date || '');
 
-    await mailer.sendMail({
-      from: `"Tip For Me" <${process.env.SMTP_USER}>`,
-      to: email.trim(),
-      subject: `Potwierdzenie napiwku — ${safeAmount} zł`,
-      html: `
+    const subjectLine = isDeclined
+      ? `Płatność odrzucona — ${safeAmount} zł`
+      : `Potwierdzenie napiwku — ${safeAmount} zł`;
+
+    const htmlBody = isDeclined ? `
+        <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0c0a13;color:#f3f0ff;padding:40px 32px;border-radius:20px;">
+          <div style="text-align:center;margin-bottom:32px;">
+            <div style="font-size:48px;margin-bottom:8px;">✗</div>
+            <h1 style="font-size:28px;font-weight:900;color:#f87171;margin:0;">Płatność odrzucona</h1>
+            <p style="color:#6B7280;font-size:14px;margin-top:8px;">Transakcja nie została zrealizowana</p>
+          </div>
+          <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(248,113,113,0.2);border-radius:16px;padding:24px;margin-bottom:24px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+              <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">KWOTA</span>
+              <span style="font-size:24px;font-weight:900;color:#f87171;">${safeAmount} zł</span>
+            </div>
+            <div style="border-top:1px solid rgba(248,113,113,0.15);padding-top:16px;display:flex;justify-content:space-between;">
+              <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">KARTA</span>
+              <span style="color:#A78BFA;font-weight:600;">${safeMethod} ••${safeLast4}</span>
+            </div>
+            <div style="border-top:1px solid rgba(248,113,113,0.15);padding-top:16px;margin-top:16px;display:flex;justify-content:space-between;">
+              <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">DATA</span>
+              <span style="color:#A78BFA;font-weight:600;">${safeDate}</span>
+            </div>
+            <div style="border-top:1px solid rgba(248,113,113,0.15);padding-top:16px;margin-top:16px;display:flex;justify-content:space-between;">
+              <span style="color:#6B7280;font-size:12px;font-weight:700;letter-spacing:2px;">STATUS</span>
+              <span style="color:#f87171;font-weight:700;">Odrzucono</span>
+            </div>
+          </div>
+          <p style="color:#6B7280;font-size:12px;text-align:center;line-height:20px;">
+            Żadne środki nie zostały pobrane z Twojej karty.<br/>
+            Płatności obsługuje <strong style="color:#C084FC;">Stripe Payments Europe Ltd.</strong>
+          </p>
+        </div>
+      ` : `
         <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0c0a13;color:#f3f0ff;padding:40px 32px;border-radius:20px;">
           <div style="text-align:center;margin-bottom:32px;">
             <div style="font-size:48px;margin-bottom:8px;">✓</div>
@@ -987,7 +1062,13 @@ app.post('/api/send-receipt', authenticateToken, async (req, res) => {
             Płatności obsługuje Stripe Payments Europe Ltd.
           </p>
         </div>
-      `,
+      `;
+
+    await mailer.sendMail({
+      from: `"Tip For Me" <${process.env.SMTP_USER}>`,
+      to: email.trim(),
+      subject: subjectLine,
+      html: htmlBody,
     });
 
     res.json({ sent: true });
@@ -1101,8 +1182,8 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
   }
 });
 
-// Endpoint /api/payout usunięty — wypłaty są automatyczne (schedule: weekly, piątek)
-// Stripe sam przelewa dostępne środki co piątek na konto bankowe użytkownika
+// Endpoint /api/payout usunięty — wypłaty są automatyczne (schedule: daily)
+// Stripe sam przelewa dostępne środki każdego dnia roboczego na konto bankowe użytkownika
 
 
 // Webhook zarejestrowany na górze pliku (przed express.json())
