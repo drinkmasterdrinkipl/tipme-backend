@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
@@ -29,49 +31,111 @@ export default function AccountDetailsScreen() {
       const email = await AsyncStorage.getItem('userEmail') ?? '';
       if (!accountId) throw new Error('Brak ID konta');
 
-      const res = await apiFetch(`${API_URL}/api/payouts/${accountId}`);
+      const year = new Date().getFullYear();
+      const res = await apiFetch(`${API_URL}/api/payouts-annual/${accountId}?year=${year}`);
       if (!res.ok) throw new Error('Błąd serwera');
       const json = await res.json();
       const payouts: any[] = json.payouts || [];
 
       if (payouts.length === 0) {
-        Alert.alert('Brak danych', 'Nie masz jeszcze żadnych wypłat do wyeksportowania.');
+        Alert.alert('Brak danych', `Nie masz jeszcze żadnych wypłat w ${year} roku.`);
         return;
       }
 
-      const now = new Date().toLocaleDateString('pl-PL');
+      const generatedAt = new Date().toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
       const paid = payouts.filter(p => p.status === 'paid');
       const total = paid.reduce((sum, p) => sum + (p.amount ?? 0), 0);
-      const separator = '─────────────────────────────';
 
       const rows = payouts.map(p => {
-        const date = new Date((p.arrivalDate ?? p.arrival_date) * 1000).toLocaleDateString('pl-PL');
-        const statusLabel = p.status === 'paid' ? '✓ Wysłano na konto' : p.status === 'failed' ? '✗ Błąd' : '⏳ W toku';
+        const date = new Date((p.arrivalDate ?? p.arrival_date) * 1000).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const statusLabel = p.status === 'paid' ? '✓ Wysłano' : p.status === 'failed' ? '✗ Błąd' : '⏳ W toku';
+        const statusColor = p.status === 'paid' ? '#16a34a' : p.status === 'failed' ? '#dc2626' : '#d97706';
         const amount = (p.amount ?? 0).toFixed(2);
-        return `${date}   ${statusLabel}\n  Kwota: ${amount} zł`;
-      }).join('\n\n');
+        return `
+          <tr>
+            <td>${date}</td>
+            <td style="color:${statusColor};font-weight:700">${statusLabel}</td>
+            <td style="text-align:right;font-weight:700">+${amount} zł</td>
+          </tr>`;
+      }).join('');
 
-      const text = [
-        '💜 TIP FOR ME — ZESTAWIENIE WYPŁAT',
-        separator,
-        `Konto: ${email}`,
-        `Wygenerowano: ${now}`,
-        separator,
-        '',
-        rows,
-        '',
-        separator,
-        `ŁĄCZNIE WYSŁANO NA KONTO: ${total.toFixed(2)} zł`,
-        separator,
-        '',
-        'Kwoty faktycznie wysłane na konto bankowe.',
-        '',
-        'Tip For Me · tipforme.app',
-      ].join('\n');
+      const html = `
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, Arial, sans-serif; color: #1a1a1a; padding: 40px; }
+    .header { text-align: center; margin-bottom: 36px; }
+    .logo { font-size: 28px; font-weight: 900; color: #9333ea; letter-spacing: -0.5px; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #666; }
+    .meta { background: #f8f5ff; border: 1px solid #e9d5ff; border-radius: 12px; padding: 18px 24px; margin-bottom: 28px; }
+    .meta-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+    .meta-label { color: #666; }
+    .meta-value { font-weight: 700; color: #1a1a1a; }
+    h2 { font-size: 11px; font-weight: 800; letter-spacing: 2px; color: #666; margin-bottom: 12px; text-transform: uppercase; }
+    table { width: 100%; border-collapse: collapse; }
+    th { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px; border-bottom: 2px solid #e5e7eb; text-align: left; }
+    th:last-child { text-align: right; }
+    td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; font-size: 14px; color: #1a1a1a; }
+    tr:last-child td { border-bottom: none; }
+    .total-row { background: #f8f5ff; border-top: 2px solid #9333ea; }
+    .total-row td { font-size: 15px; font-weight: 900; color: #9333ea; padding: 16px 14px; }
+    .footer { margin-top: 36px; text-align: center; font-size: 11px; color: #aaa; line-height: 1.8; }
+    .note { margin-top: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; font-size: 12px; color: #555; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">Tip For Me</div>
+    <div class="subtitle">Roczne zestawienie wypłat na konto bankowe</div>
+  </div>
 
-      await Share.share({ message: text, title: 'Zestawienie wypłat — Tip For Me' });
+  <div class="meta">
+    <div class="meta-row"><span class="meta-label">Konto</span><span class="meta-value">${email}</span></div>
+    <div class="meta-row"><span class="meta-label">Rok rozliczeniowy</span><span class="meta-value">${year}</span></div>
+    <div class="meta-row"><span class="meta-label">Wygenerowano</span><span class="meta-value">${generatedAt}</span></div>
+    <div class="meta-row"><span class="meta-label">Liczba wypłat</span><span class="meta-value">${paid.length}</span></div>
+  </div>
+
+  <h2>Wypłaty na konto bankowe</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Data wpływu</th>
+        <th>Status</th>
+        <th style="text-align:right">Kwota</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+      <tr class="total-row">
+        <td colspan="2">ŁĄCZNIE WYPŁACONO W ${year} ROKU</td>
+        <td style="text-align:right">${total.toFixed(2)} zł</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    Zestawienie obejmuje wyłącznie środki faktycznie wysłane na konto bankowe w roku ${year}.
+    Kwoty po potrąceniu prowizji platformy. Dokument wygenerowany automatycznie przez aplikację Tip For Me.
+  </div>
+
+  <div class="footer">
+    Tip For Me · tipforme.app · Obsługiwane przez Stripe Payments Europe Ltd.
+  </div>
+</body>
+</html>`;
+
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Zestawienie wypłat ${year} — Tip For Me`,
+        UTI: 'com.adobe.pdf',
+      });
     } catch (e: any) {
-      Alert.alert('Błąd', 'Nie udało się wygenerować zestawienia.');
+      Alert.alert('Błąd', 'Nie udało się wygenerować zestawienia. Spróbuj ponownie.');
     } finally {
       if (mountedRef.current) setExporting(false);
     }
@@ -173,7 +237,7 @@ export default function AccountDetailsScreen() {
             <TouchableOpacity style={s.exportBtn} onPress={exportStatement} disabled={exporting}>
               {exporting
                 ? <ActivityIndicator color="#22c55e" />
-                : <Text style={s.exportBtnText}>📄 Pobierz zestawienie wypłat</Text>}
+                : <Text style={s.exportBtnText}>📄 Pobierz roczne zestawienie wypłat ({new Date().getFullYear()})</Text>}
             </TouchableOpacity>
 
             {!data.detailsSubmitted && (

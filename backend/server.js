@@ -1130,7 +1130,7 @@ app.get('/api/account-details/:accountId', authenticateToken, requireOwnership, 
 app.get('/api/payouts/:accountId', authenticateToken, requireOwnership, async (req, res) => {
   try {
     const payouts = await stripe.payouts.list(
-      { limit: 20 },
+      { limit: 10 },
       { stripeAccount: req.params.accountId }
     );
     res.json({
@@ -1142,6 +1142,41 @@ app.get('/api/payouts/:accountId', authenticateToken, requireOwnership, async (r
         created: p.created,
       })),
     });
+  } catch (error) {
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+// ============================================
+// 7b. ROCZNE ZESTAWIENIE WYPŁAT — wszystkie wypłaty z danego roku
+// ============================================
+app.get('/api/payouts-annual/:accountId', authenticateToken, requireOwnership, async (req, res) => {
+  try {
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+    const gte = Math.floor(new Date(year, 0, 1).getTime() / 1000);
+    const lt  = Math.floor(new Date(year + 1, 0, 1).getTime() / 1000);
+
+    const allPayouts = [];
+    let startingAfter;
+    let hasMore = true;
+
+    while (hasMore) {
+      const params = { limit: 100, created: { gte, lt } };
+      if (startingAfter) params.starting_after = startingAfter;
+      const result = await stripe.payouts.list(params, { stripeAccount: req.params.accountId });
+      for (const p of result.data) {
+        allPayouts.push({
+          id: p.id,
+          amount: p.amount / 100,
+          status: p.status,
+          arrivalDate: p.arrival_date,
+        });
+      }
+      hasMore = result.has_more;
+      if (result.data.length > 0) startingAfter = result.data[result.data.length - 1].id;
+    }
+
+    res.json({ payouts: allPayouts, year });
   } catch (error) {
     res.status(500).json({ error: safeError(error) });
   }
