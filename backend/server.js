@@ -444,55 +444,68 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
     const html = `
 <!DOCTYPE html>
-<html lang="pl">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#0c0a13;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0c0a13;padding:40px 20px;">
-    <tr><td align="center">
-      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+<html lang="pl" style="background:#0c0a13;">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="supported-color-schemes" content="dark">
+  <style type="text/css">
+    html, body, .bg { background-color: #0c0a13 !important; }
+    .card { background-color: #13111c !important; }
+    .sec { background-color: #1a1428 !important; }
+    body { margin: 0 !important; padding: 0 !important; }
+  </style>
+</head>
+<body class="bg" bgcolor="#0c0a13" style="margin:0;padding:0;background-color:#0c0a13 !important;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table class="bg" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0c0a13" style="background-color:#0c0a13 !important;padding:40px 20px;">
+    <tr><td align="center" bgcolor="#0c0a13" style="background-color:#0c0a13 !important;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
 
         <!-- Logo -->
-        <tr><td align="center" style="padding-bottom:32px;">
+        <tr><td align="center" bgcolor="#0c0a13" style="background-color:#0c0a13 !important;padding-bottom:32px;">
           <div style="font-size:36px;margin-bottom:8px;">💜</div>
           <div style="font-size:22px;font-weight:900;color:#a855f7;letter-spacing:-0.5px;">Tip For Me</div>
         </td></tr>
 
         <!-- Karta główna -->
-        <tr><td style="background:#13111c;border:1px solid rgba(168,85,247,0.15);border-radius:20px;padding:36px 32px;">
+        <tr><td class="card" bgcolor="#13111c" style="background-color:#13111c !important;border:1px solid #2a1f3d;border-radius:20px;padding:36px 32px;">
 
           <h1 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#f0eef5;letter-spacing:-0.5px;">
             Reset hasła
           </h1>
-          <p style="margin:0 0 28px;font-size:15px;color:#777;line-height:1.6;">
+          <p style="margin:0 0 28px;font-size:15px;color:#9980b3;line-height:1.6;">
             Otrzymaliśmy prośbę o reset hasła do Twojego konta.<br>
             Kliknij przycisk poniżej, aby ustawić nowe hasło.
           </p>
 
           <!-- Przycisk -->
-          <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
-            <tr><td align="center" style="background:#a855f7;border-radius:14px;">
+          <table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;">
+            <tr><td align="center" bgcolor="#a855f7" style="background-color:#a855f7 !important;border-radius:14px;">
               <a href="${resetLink}"
-                 style="display:inline-block;padding:16px 36px;font-size:16px;font-weight:800;color:#ffffff;text-decoration:none;letter-spacing:-0.3px;">
+                 style="display:inline-block;padding:16px 36px;font-size:16px;font-weight:800;color:#ffffff !important;text-decoration:none;letter-spacing:-0.3px;">
                 Ustaw nowe hasło →
               </a>
             </td></tr>
           </table>
 
           <!-- Bezpieczeństwo -->
-          <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:12px;padding:16px;margin-bottom:24px;">
-            <p style="margin:0;font-size:13px;color:#666;line-height:1.6;">
-              🔒 <strong style="color:#888;">Link jest jednorazowy i wygasa po 1 godzinie.</strong><br>
-              Jeśli nie prosiłeś o reset hasła, zignoruj tę wiadomość — Twoje konto jest bezpieczne.
-            </p>
-          </div>
+          <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
+            <tr><td class="sec" bgcolor="#1a1428" style="background-color:#1a1428 !important;border:1px solid #2a1f3d;border-radius:12px;padding:16px;">
+              <p style="margin:0;font-size:13px;color:#9980b3;line-height:1.6;">
+                🔒 <strong style="color:#c084fc;">Link jest jednorazowy i wygasa po 1 godzinie.</strong><br>
+                Jeśli nie prosiłeś o reset hasła, zignoruj tę wiadomość — Twoje konto jest bezpieczne.
+              </p>
+            </td></tr>
+          </table>
 
         </td></tr>
 
         <!-- Stopka -->
-        <tr><td align="center" style="padding-top:24px;">
-          <p style="margin:0;font-size:12px;color:#333;line-height:1.6;">
+        <tr><td align="center" bgcolor="#0c0a13" style="background-color:#0c0a13 !important;padding-top:24px;">
+          <p style="margin:0;font-size:12px;color:#6d5c8a;line-height:1.6;">
             Tip For Me · Bezpieczne płatności napiwkowe<br>
-            Obsługiwane przez <a href="https://stripe.com" style="color:#555;text-decoration:none;">Stripe</a>
+            Obsługiwane przez <a href="https://stripe.com" style="color:#a855f7;text-decoration:none;">Stripe</a>
           </p>
         </td></tr>
 
