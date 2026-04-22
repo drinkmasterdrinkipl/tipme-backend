@@ -8,16 +8,20 @@ import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Switch, Alert, ActivityIndicator,
+  ScrollView, Switch, Alert, ActivityIndicator, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import { C } from '../theme';
 import { useAppContext } from '../AppContext';
+import { API_URL, apiFetch } from '../config';
+import { isProximityReaderDiscoveryAvailable, presentProximityReaderEducation } from '../hooks/useProximityReaderDiscovery';
+
+const isIOS18Plus = Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 18;
 
 export default function SettingsScreen({ navigation }: any) {
   const { onLogout } = useAppContext();
-  const { disconnectReader } = useStripeTerminal();
+  const { disconnectReader, discoverReaders } = useStripeTerminal();
   const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -40,8 +44,7 @@ export default function SettingsScreen({ navigation }: any) {
   const toggleTapToPay = async (value: boolean) => {
     if (value) {
       navigation.navigate('TapToPayWelcome', {
-        onComplete: async () => {
-          navigation.goBack();
+        onComplete: () => {
           setTapToPayEnabled(true);
         },
       });
@@ -64,10 +67,60 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
+  const handleShowTutorial = async () => {
+    await presentProximityReaderEducation().catch(() => {});
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Usuń konto',
+      'Czy na pewno chcesz trwale usunąć konto? Wszystkie dane zostaną usunięte i nie będzie możliwości ich odzyskania.',
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        {
+          text: 'Usuń konto',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Ostatnie potwierdzenie',
+              'To działanie jest nieodwracalne. Twoje konto Stripe zostanie trwale usunięte.',
+              [
+                { text: 'Anuluj', style: 'cancel' },
+                {
+                  text: 'Tak, usuń',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const res = await apiFetch(`${API_URL}/api/delete-account`, { method: 'DELETE' });
+                      const data = await res.json();
+                      if (!res.ok) {
+                        Alert.alert('Błąd', data.error || 'Nie można usunąć konta');
+                        return;
+                      }
+                      await disconnectReader().catch(() => {});
+                      await AsyncStorage.multiRemove([
+                        'stripeAccountId', 'userEmail', 'stripeLocationId',
+                        'tapToPayEnabled', 'tapToPayWelcomeShown', 'tapToPayEducationShown',
+                        'authToken',
+                      ]).catch(() => {});
+                      onLogout();
+                    } catch {
+                      Alert.alert('Błąd', 'Brak połączenia — spróbuj ponownie');
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const handleLogout = () => {
     Alert.alert(
-      'Wyloguj się',
-      'Czy na pewno chcesz się wylogować? Dane konta zostaną usunięte z urządzenia.',
+      'Czy na pewno chcesz się wylogować?',
+      null,
       [
         { text: 'Anuluj', style: 'cancel' },
         {
@@ -129,52 +182,12 @@ export default function SettingsScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* Pomoc */}
-        <Text style={s.sectionLabel}>POMOC — JAK UŻYWAĆ TAP TO PAY</Text>
-        <View style={s.section}>
-          {[
-            {
-              icon: '💳',
-              title: 'Karty zbliżeniowe',
-              desc: 'Klient przykłada kartę do przedniej części iPhone\'a i trzyma przez 1-2 sekundy.',
-            },
-            {
-              icon: '📱',
-              title: 'Apple Pay / portfele cyfrowe',
-              desc: 'Klient przykłada telefon lub zegarek — działa tak samo jak karta.',
-            },
-            {
-              icon: '⚡',
-              title: 'Szybkość płatności',
-              desc: 'Płatność powinna pojawić się w ciągu 1 sekundy po naciśnięciu przycisku.',
-            },
-            {
-              icon: '🔒',
-              title: 'Bezpieczeństwo',
-              desc: 'Dane karty są szyfrowane przez Apple i Stripe. Nigdy nie masz dostępu do pełnego numeru karty.',
-            },
-            {
-              icon: '❓',
-              title: 'Problemy z płatnością',
-              desc: 'Jeśli karta nie zostanie odczytana, poproś klienta żeby przykładał kartę wolniej lub sprawdź połączenie internetowe.',
-            },
-          ].map((item) => (
-            <View key={item.title} style={s.helpRow}>
-              <Text style={s.helpIcon}>{item.icon}</Text>
-              <View style={s.helpText}>
-                <Text style={s.helpTitle}>{item.title}</Text>
-                <Text style={s.helpDesc}>{item.desc}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
         {/* Edukacja */}
         <Text style={s.sectionLabel}>SAMOUCZEK</Text>
         <View style={s.section}>
           <TouchableOpacity
             style={s.row}
-            onPress={() => navigation.navigate('TapToPayEducation', { onComplete: () => navigation.goBack() })}
+            onPress={handleShowTutorial}
             activeOpacity={0.7}
           >
             <Text style={s.rowLabel}>Pokaż samouczek Tap to Pay</Text>
@@ -183,11 +196,40 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
 
 
+        {/* Prawne */}
+        <Text style={s.sectionLabel}>PRAWNE</Text>
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.row}
+            onPress={() => navigation.navigate('StripeWebView', { url: 'https://tipforme.app/regulamin.html' })}
+            activeOpacity={0.7}
+          >
+            <Text style={s.rowLabel}>Regulamin i warunki</Text>
+            <Text style={s.rowArrow}>→</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.row, { borderBottomWidth: 0 }]}
+            onPress={() => navigation.navigate('StripeWebView', { url: 'https://tipforme.app/polityka-prywatnosci.html' })}
+            activeOpacity={0.7}
+          >
+            <Text style={s.rowLabel}>Polityka prywatności</Text>
+            <Text style={s.rowArrow}>→</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Wyloguj */}
         <Text style={s.sectionLabel}>WYLOGUJ SIĘ</Text>
         <View style={s.section}>
           <TouchableOpacity style={s.logoutRow} onPress={handleLogout} activeOpacity={0.7}>
             <Text style={s.logoutText}>Wyloguj się</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Usuń konto — wymaganie Apple 5.1.1 */}
+        <Text style={s.sectionLabel}>ZARZĄDZANIE KONTEM</Text>
+        <View style={s.section}>
+          <TouchableOpacity style={s.deleteRow} onPress={handleDeleteAccount} activeOpacity={0.7}>
+            <Text style={s.deleteText}>Usuń konto</Text>
           </TouchableOpacity>
         </View>
 
@@ -220,17 +262,10 @@ const s = StyleSheet.create({
   rowDesc: { fontSize: 12, color: C.text3, marginTop: 2 },
   rowValue: { fontSize: 14, color: C.text3 },
   rowArrow: { fontSize: 16, color: C.text3 },
-  helpRow: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    paddingHorizontal: 18, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: C.cardBorder,
-  },
-  helpIcon: { fontSize: 20, width: 32, marginTop: 1 },
-  helpText: { flex: 1 },
-  helpTitle: { fontSize: 14, fontWeight: '700', color: C.text1, marginBottom: 3 },
-  helpDesc: { fontSize: 12, color: C.text3, lineHeight: 18 },
   logoutRow: { paddingHorizontal: 18, paddingVertical: 18 },
   logoutText: { fontSize: 15, fontWeight: '700', color: C.error, textAlign: 'center' },
+  deleteRow: { paddingHorizontal: 18, paddingVertical: 18 },
+  deleteText: { fontSize: 14, fontWeight: '600', color: C.error, textAlign: 'center', opacity: 0.7 },
   version: {
     textAlign: 'center', fontSize: 12, color: C.text4,
     marginTop: 24, marginBottom: 40,

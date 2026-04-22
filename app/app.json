@@ -2,6 +2,7 @@
   "expo": {
     "name": "Tip For Me",
     "slug": "tipme",
+    "scheme": "tipforme",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -17,8 +18,8 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.drinki.tipme",
-      "buildNumber": "2",
-      "minimumOsVersion": "17.6",
+      "buildNumber": "3",
+      "minimumOsVersion": "18.0",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Tip For Me potrzebuje lokalizacji do przetwarzania płatności Tap to Pay.",
         "NFCReaderUsageDescription": "Tip For Me używa NFC do przyjmowania płatności zbliżeniowych.",
@@ -27,7 +28,8 @@
         "UIBackgroundModes": [
           "bluetooth-central",
           "bluetooth-peripheral"
-        ]
+        ],
+        "UIRequiredDeviceCapabilities": ["nfc"]
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -41,7 +43,7 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#a855f7",
+          "color": "#9333ea",
           "sounds": []
         }
       ]

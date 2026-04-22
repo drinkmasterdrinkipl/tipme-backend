@@ -4,10 +4,12 @@ import {
   View, Text, TouchableOpacity, TextInput,
   StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import { C } from '../theme';
+import { API_URL, apiFetch } from '../config';
 
 const TIP_PRESETS = [5, 10, 15, 20, 30, 40, 50, 100, 200];
 
@@ -15,16 +17,16 @@ export default function HomeScreen({ navigation }: any) {
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState('');
   const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
+  const [chargesEnabled, setChargesEnabled] = useState(true);
   const [navigating, setNavigating] = useState(false);
   const warmupDoneRef = useRef(false);
+  const discoveredRef = useRef<any[]>([]);
 
-  const { discoverReaders, connectReader, disconnectReader } = useStripeTerminal({
-    // Wymaganie Apple 1.6: status pobieramy z SDK (Apple), nie z lokalnej zmiennej
+  const { initialize, discoverReaders, disconnectReader } = useStripeTerminal({
+    // Wymaganie Apple 1.6: SDK potwierdza dostępność czytnika — ale NIE nadpisuje
+    // świadomego wyboru usera (wyłączone w Ustawieniach = zostaje wyłączone)
     onUpdateDiscoveredReaders: (readers) => {
-      if (readers.length > 0) {
-        AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
-        setTapToPayEnabled(true);
-      }
+      discoveredRef.current = readers;
     },
   });
 
@@ -37,15 +39,21 @@ export default function HomeScreen({ navigation }: any) {
       const locationId = await AsyncStorage.getItem('stripeLocationId');
       if (!locationId) return; // niezarejestrowany użytkownik
       if (warmupDoneRef.current) return;
+      // Upewnij się że SDK jest zainicjalizowane przed wywołaniem discoverReaders
+      // (TerminalWarmup może jeszcze nie skończyć initialize() — eliminuje race condition)
+      await initialize().catch(() => {});
       await disconnectReader().catch(() => {});
       const { error } = await discoverReaders({ discoveryMethod: 'tapToPay', simulated: false });
       if (error) {
-        // SDK zwrócił błąd — synchronizujemy stan z Apple
-        await AsyncStorage.removeItem('tapToPayEnabled').catch(() => {});
-        setTapToPayEnabled(false);
+        // SDK zawiedzie = T&C mogą wymagać ponownej akceptacji — wyłącz tylko jeśli było włączone
+        const wasEnabled = await AsyncStorage.getItem('tapToPayEnabled').catch(() => null);
+        if (wasEnabled === 'true') {
+          await AsyncStorage.removeItem('tapToPayEnabled').catch(() => {});
+          setTapToPayEnabled(false);
+        }
         return;
       }
-      // onUpdateDiscoveredReaders zaktualizuje tapToPayEnabled gdy znajdzie czytnik
+      // SDK działa — nie nadpisuj wyboru usera (wyłączone zostaje wyłączone)
       warmupDoneRef.current = true;
     } catch { /* cicho — warmup nieblokujący */ }
   }, [discoverReaders, disconnectReader]);
@@ -56,6 +64,16 @@ export default function HomeScreen({ navigation }: any) {
     setCustomAmount('');
     // Odczyt wstępny z AsyncStorage dla natychmiastowego UI
     AsyncStorage.getItem('tapToPayEnabled').then(v => setTapToPayEnabled(v === 'true')).catch(() => {});
+    // Sprawdź czy konto Stripe jest zweryfikowane
+    AsyncStorage.getItem('stripeAccountId').then(async (accountId) => {
+      if (!accountId) return;
+      try {
+        const res = await apiFetch(`${API_URL}/api/account-status/${accountId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setChargesEnabled(!!data.chargesEnabled);
+      } catch { /* nie blokuj UI przy braku internetu */ }
+    }).catch(() => {});
     // Wymaganie Apple 1.6: zawsze weryfikuj aktualny status z SDK
     warmupReader();
     return () => { warmupDoneRef.current = false; };
@@ -65,23 +83,15 @@ export default function HomeScreen({ navigation }: any) {
   const typeCustom = (val: string) => { setCustomAmount(val); setSelectedPreset(null); };
 
   const startPayment = () => {
-    if (finalAmount < 2 || navigating) return;
+    if (finalAmount < 5 || finalAmount > 1000 || navigating || !chargesEnabled) return;
     Keyboard.dismiss();
-    setNavigating(true);
     if (!tapToPayEnabled) {
-      // Wymaganie Apple 5.3: przycisk nigdy nie zablokowany — otwórz flow włączenia
-      navigation.navigate('TapToPayWelcome', {
-        onComplete: () => {
-          AsyncStorage.setItem('tapToPayEnabled', 'true').then(() => {
-            setTapToPayEnabled(true);
-            navigation.navigate('Tap', { amount: Math.round(finalAmount * 100) });
-          }).finally(() => setNavigating(false));
-        },
-      });
+      // Wymaganie Apple 5.3: przycisk checkout automatycznie otwiera T&C Tap to Pay
+      navigation.navigate('TapToPayWelcome', { onComplete: () => setTapToPayEnabled(true) });
       return;
     }
+    setNavigating(true);
     navigation.navigate('Tap', { amount: Math.round(finalAmount * 100) });
-    // Reset po chwili — na wypadek gdyby user wrócił bez płatności
     setTimeout(() => setNavigating(false), 1000);
   };
 
@@ -109,7 +119,6 @@ export default function HomeScreen({ navigation }: any) {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-
           {/* Presety */}
           <Text style={s.sectionLabel}>WYBIERZ KWOTĘ</Text>
           <View style={s.presets}>
@@ -147,21 +156,46 @@ export default function HomeScreen({ navigation }: any) {
             </View>
           </View>
 
-          {/* CTA — wewnątrz ScrollView */}
-          <View style={s.ctaWrap}>
-            <TouchableOpacity
-              style={[s.cta, finalAmount >= 2 && s.ctaActive]}
-              onPress={startPayment}
-              activeOpacity={0.85}
-            >
-              <Text style={[s.ctaText, finalAmount >= 2 && s.ctaTextActive]}>
-                {finalAmount >= 2
-                  ? `Pobierz ${finalAmount % 1 === 0 ? finalAmount.toFixed(0) : finalAmount.toFixed(2)} zł`
-                  : finalAmount > 0 ? 'Minimalna kwota: 2 zł' : 'Wybierz kwotę'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* Baner weryfikacji — widoczny gdy konto niezweryfikowane */}
+          {!chargesEnabled && (
+            <View style={s.verifyBanner}>
+              <Text style={s.verifyIcon}>⏳</Text>
+              <View style={s.verifyTextWrap}>
+                <Text style={s.verifyTitle}>Konto w trakcie weryfikacji</Text>
+                <Text style={s.verifyDesc}>Stripe weryfikuje Twoje dane. Płatności zostaną odblokowane automatycznie po zatwierdzeniu konta — zazwyczaj do 24h.</Text>
+              </View>
+            </View>
+          )}
         </ScrollView>
+
+        {/* CTA — poza ScrollView, zawsze widoczny (wymaganie Apple 5.2) */}
+        <View style={s.ctaWrap}>
+          <TouchableOpacity
+            style={[s.cta, finalAmount >= 5 && finalAmount <= 1000 && chargesEnabled && s.ctaActive]}
+            onPress={startPayment}
+            activeOpacity={0.85}
+          >
+            <View style={s.ctaInner}>
+              {finalAmount >= 5 && chargesEnabled && (
+                <SymbolView
+                  name="wave.3.right.circle.fill"
+                  size={22}
+                  tintColor="#fff"
+                  style={{ marginRight: 8 }}
+                />
+              )}
+              <Text style={[s.ctaText, finalAmount >= 5 && finalAmount <= 1000 && chargesEnabled && s.ctaTextActive]}>
+                {!chargesEnabled
+                  ? 'Oczekiwanie na weryfikację Stripe'
+                  : finalAmount > 1000
+                    ? 'Maksymalna kwota: 1000 zł'
+                    : finalAmount >= 5
+                      ? `Tap to Pay on iPhone · ${finalAmount % 1 === 0 ? finalAmount.toFixed(0) : finalAmount.toFixed(2)} zł`
+                      : finalAmount > 0 ? 'Minimalna kwota: 5 zł' : 'Wybierz kwotę'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -169,7 +203,7 @@ export default function HomeScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  scroll: { flexGrow: 1, justifyContent: 'center', paddingBottom: 16 },
+  scroll: { flexGrow: 1, paddingBottom: 8, paddingTop: 8 },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8,
@@ -203,8 +237,18 @@ const s = StyleSheet.create({
   input: { flex: 1, paddingVertical: 14, paddingHorizontal: 20, color: C.text1, fontSize: 26, fontWeight: '800', textAlign: 'center' },
   inputCurrBox: { justifyContent: 'center', paddingHorizontal: 18, borderLeftWidth: 1, borderLeftColor: C.cardBorder },
   inputCurr: { fontSize: 15, fontWeight: '700', color: C.text3 },
-  ctaWrap: { paddingHorizontal: 24, paddingBottom: 16, paddingTop: 12 },
+  verifyBanner: {
+    marginHorizontal: 24, marginBottom: 12, borderRadius: 16,
+    backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)',
+    padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+  },
+  verifyIcon: { fontSize: 20, marginTop: 1 },
+  verifyTextWrap: { flex: 1 },
+  verifyTitle: { fontSize: 13, fontWeight: '700', color: '#F59E0B', marginBottom: 4 },
+  verifyDesc: { fontSize: 12, color: C.text3, lineHeight: 18 },
+  ctaWrap: { paddingHorizontal: 24, paddingBottom: 16, paddingTop: 12, backgroundColor: C.bg },
   cta: { paddingVertical: 20, borderRadius: 22, backgroundColor: C.text4, alignItems: 'center' },
+  ctaInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   ctaActive: { backgroundColor: C.primary, shadowColor: C.primary, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 30 },
   ctaText: { fontSize: 17, fontWeight: '800', color: C.text3 },
   ctaTextActive: { color: C.white },

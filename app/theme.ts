@@ -1,8 +1,8 @@
 export const C = {
   bg: '#070511',
   surface: '#0D0920',
-  card: 'rgba(255,255,255,0.035)',
-  cardBorder: 'rgba(149,76,233,0.18)',
+  card: 'rgba(255,255,255,0.055)',
+  cardBorder: 'rgba(149,76,233,0.22)',
   cardBorderActive: 'rgba(149,76,233,0.55)',
   primary: '#9333EA',
   primaryLight: '#C084FC',
@@ -15,7 +15,7 @@ export const C = {
   error: '#EF4444',
   text1: '#F3F0FF',
   text2: '#A78BFA',
-  text3: '#6B7280',
+  text3: '#7C8494',
   text4: '#2D2640',
   white: '#FFFFFF',
 };

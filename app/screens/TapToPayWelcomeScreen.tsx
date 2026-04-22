@@ -8,10 +8,13 @@ import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, Linking, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
+import { isProximityReaderDiscoveryAvailable, presentProximityReaderEducation } from '../hooks/useProximityReaderDiscovery';
+
+const isIOS18Plus = Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 18;
 
 export default function TapToPayWelcomeScreen({ navigation, route }: any) {
   const { onComplete } = route.params ?? {};
@@ -26,20 +29,27 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
     setLoading(true);
     try {
       await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
-      // Wymaganie Apple 4.1: uruchom discovery — na iOS 18+ SDK automatycznie pokaże
-      // systemowy ekran edukacyjny ProximityReaderDiscovery przed naszym ekranem
+
+      // iOS 18+: systemowy ekran edukacyjny Apple (ProximityReaderDiscovery)
+      await presentProximityReaderEducation().catch(() => {});
+      AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
+      AsyncStorage.setItem('tapToPayEducationShown', 'true').catch(() => {});
       const locationId = await AsyncStorage.getItem('stripeLocationId');
       if (locationId) {
         await disconnectReader().catch(() => {});
         discoverReaders({ discoveryMethod: 'tapToPay', simulated: false }).catch(() => {});
       }
-      navigation.replace('TapToPayEducation', { onComplete });
+      if (typeof onComplete === 'function') { try { onComplete(); } catch {} }
+      navigation.goBack();
     } finally {
       setLoading(false);
     }
   };
 
   const handleSkip = async () => {
+    // Wymaganie Apple 3.3: oznacz jako zobaczony — użytkownik widział komunikat o Tap to Pay
+    // (warunek "display communications at least once" jest spełniony)
+    await AsyncStorage.setItem('tapToPayWelcomeShown', 'true').catch(() => {});
     navigation.goBack();
   };
 
@@ -48,30 +58,11 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Hero */}
         <View style={s.hero}>
-          <View style={s.iconWrap}>
-            <Text style={s.icon}>⬡</Text>
-          </View>
-          <Text style={s.title}>Tap to Pay{'\n'}na iPhonie</Text>
+          <Text style={s.title}>Tap to Pay{'\n'}on iPhone</Text>
           <Text style={s.sub}>
             Przyjmuj płatności zbliżeniowe bezpośrednio swoim iPhonem — bez dodatkowego terminala.
           </Text>
         </View>
-
-        {/* Funkcje */}
-        {[
-          ['💳', 'Karty zbliżeniowe', 'Visa, Mastercard i inne karty płatnicze'],
-          ['📱', 'Apple Pay i Google Pay', 'Portfele cyfrowe i zegarki'],
-          ['⚡', 'Natychmiastowa płatność', 'Klient przykłada telefon — gotowe'],
-          ['🔒', 'Bezpieczne', 'Szyfrowanie Apple + certyfikacja Stripe'],
-        ].map(([icon, title, desc]) => (
-          <View key={title} style={s.featureRow}>
-            <Text style={s.featureIcon}>{icon}</Text>
-            <View style={s.featureText}>
-              <Text style={s.featureTitle}>{title}</Text>
-              <Text style={s.featureDesc}>{desc}</Text>
-            </View>
-          </View>
-        ))}
 
         {/* Warunki */}
         <View style={s.termsBox}>
@@ -81,6 +72,14 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
             Akceptując, zgadzasz się na przetwarzanie danych transakcji przez Apple i Stripe
             zgodnie z ich politykami prywatności.
           </Text>
+          <View style={s.termsLinks}>
+            <TouchableOpacity onPress={() => Linking.openURL('https://www.apple.com/legal/privacy/en-ww/')} activeOpacity={0.7}>
+              <Text style={s.termsLink}>Polityka prywatności Apple →</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL('https://stripe.com/en-pl/legal/consumer')} activeOpacity={0.7}>
+              <Text style={s.termsLink}>Warunki Stripe →</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={s.checkRow}
@@ -150,6 +149,8 @@ const s = StyleSheet.create({
   },
   termsTitle: { fontSize: 13, fontWeight: '700', color: '#A78BFA', marginBottom: 10 },
   termsText: { fontSize: 12, color: '#4B5563', lineHeight: 20, marginBottom: 16 },
+  termsLinks: { gap: 8, marginBottom: 16 },
+  termsLink: { fontSize: 12, color: '#A78BFA', textDecorationLine: 'underline' },
   checkRow: { flexDirection: 'row', alignItems: 'flex-start' },
   checkbox: {
     width: 22, height: 22, borderRadius: 6,

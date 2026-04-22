@@ -2,7 +2,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Platform,
+  ActivityIndicator, Platform, Modal, TextInput, KeyboardAvoidingView,
 } from 'react-native';
 import { useStripeTerminal, ErrorCode } from '@stripe/stripe-terminal-react-native';
 import type { Reader } from '@stripe/stripe-terminal-react-native';
@@ -10,13 +10,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
+const CARD_ERROR_PHRASES = [
+  'Niewystarczające środki',
+  'Karta odrzucona',
+  'Karta wygasła',
+  'Karta zablokowana',
+  'nie obsługuje płatności zbliżeniowych',
+  'Płatność anulowana',
+];
+const isCardError = (msg: string) => CARD_ERROR_PHRASES.some(p => msg.includes(p));
+
 export default function TapScreen({ navigation, route }: any) {
   const amount: number = route.params?.amount ?? 0;
   const amountZl = (amount / 100 % 1 === 0)
     ? (amount / 100).toFixed(0)
     : (amount / 100).toFixed(2);
 
-  const [status, setStatus] = useState<'connecting' | 'ready' | 'processing' | 'error'>('connecting');
+  const [status, setStatus] = useState<'connecting' | 'ready' | 'processing' | 'confirming' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
   const [initProgress, setInitProgress] = useState(0);
   const [initStep, setInitStep] = useState('Inicjalizacja SDK...');
@@ -26,12 +36,55 @@ export default function TapScreen({ navigation, route }: any) {
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
 
+  // Paragon po odrzuconej transakcji (wymaganie Apple 5.10)
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  const [receiptEmail, setReceiptEmail] = useState('');
+  const [receiptSending, setReceiptSending] = useState(false);
+  const [receiptSent, setReceiptSent] = useState(false);
+  const [receiptError, setReceiptError] = useState('');
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+  const sendDeclinedReceipt = async () => {
+    if (!isValidEmail(receiptEmail)) return;
+    setReceiptSending(true);
+    setReceiptError('');
+    try {
+      const now = new Date();
+      const date = now.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ', ' + now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+      const res = await apiFetch(`${API_URL}/api/send-receipt`, {
+        method: 'POST',
+        body: JSON.stringify({ email: receiptEmail.trim(), amount: (amount / 100).toFixed(2), last4: '****', paymentMethod: 'Karta', date, status: 'declined' }),
+      });
+      if (!res.ok) throw new Error('Błąd serwera');
+      if (mountedRef.current) { setReceiptSent(true); setTimeout(() => { if (mountedRef.current) { setReceiptModalVisible(false); setReceiptSent(false); setReceiptEmail(''); } }, 1500); }
+    } catch (e: any) {
+      if (mountedRef.current) setReceiptError(e.message || 'Nie udało się wysłać');
+    } finally {
+      if (mountedRef.current) setReceiptSending(false);
+    }
+  };
+
 
   const {
     discoverReaders, connectReader, disconnectReader,
     collectPaymentMethod, confirmPaymentIntent, retrievePaymentIntent,
   } = useStripeTerminal({
     onUpdateDiscoveredReaders: (readers) => { discoveredRef.current = readers; },
+    // Wymaganie Apple 3.9.1: wskaźnik postępu konfiguracji czytnika via PSP SDK
+    onDidStartInstallingUpdate: () => {
+      setInitStep('Aktualizacja czytnika...');
+      setInitProgress(50);
+    },
+    onDidReportReaderSoftwareUpdateProgress: (progress: number) => {
+      setInitProgress(Math.round(progress * 100));
+      setInitStep(`Aktualizacja (${Math.round(progress * 100)}%)...`);
+    },
+    onDidFinishInstallingUpdate: () => {
+      setInitStep('Czytnik zaktualizowany...');
+      setInitProgress(90);
+    },
   });
 
   const statusRef = useRef(status);
@@ -41,14 +94,27 @@ export default function TapScreen({ navigation, route }: any) {
     if (!msg) return 'Nieznany błąd';
     if (msg.includes('osVersionNotSupported') || msg.includes('OS version') || msg.includes('PaymentCardReaderError')) return 'Ta funkcja wymaga iOS 17.6 lub nowszego. Zaktualizuj system w Ustawieniach iPhone\'a.';
     if (msg.includes('Already connected')) return 'Czytnik już połączony. Trwa rozłączanie, spróbuj ponownie.';
-    if (msg.includes('Network request failed') || msg.includes('network') || msg.includes('-1009')) return 'Brak połączenia z internetem. Sprawdź sieć i spróbuj ponownie.';
-    if (msg.includes('timed out') || msg.includes('timeout') || msg.includes('Przekroczono czas')) return 'Przekroczono czas oczekiwania. Spróbuj ponownie.';
-    if (msg.includes('canceled') || msg.includes('Canceled')) return 'Płatność anulowana.';
-    if (msg.includes('declined')) return 'Karta odrzucona. Spróbuj inną kartą.';
-    if (msg.includes('insufficient_funds')) return 'Niewystarczające środki na karcie.';
+    if (msg.includes('Network request failed') || msg.includes('network') || msg.includes('-1009') || msg.includes('networkUnavailable')) return 'Brak połączenia z internetem. Sprawdź sieć i spróbuj ponownie.';
+    if (msg.includes('timed out') || msg.includes('timeout') || msg.includes('Przekroczono czas') || msg.includes('pinEntryTimeout')) return 'Przekroczono czas oczekiwania. Spróbuj ponownie.';
+    if (msg.includes('canceled') || msg.includes('Canceled') || msg.includes('pinCancelled')) return 'Płatność anulowana.';
+    if (msg.includes('phone call') || msg.includes('phone_call') || msg.includes('readNotAllowedDuringCall')) return 'Czytnik kart nie może być używany podczas rozmowy telefonicznej. Zakończ rozmowę i spróbuj ponownie.';
+    if (msg.includes('nfcDisabled')) return 'NFC jest wyłączone. Włącz NFC w Ustawieniach iPhone\'a.';
+    if (msg.includes('passcodeDisabled')) return 'Tap to Pay wymaga ustawionego kodu blokady. Ustaw go w Ustawieniach → Face ID i kod.';
+    if (msg.includes('readFromBackground')) return 'Płatność musi być wykonana gdy aplikacja jest na pierwszym planie.';
+    if (msg.includes('readerSessionExpired') || msg.includes('readerTokenExpired')) return 'Sesja wygasła. Spróbuj ponownie.';
+    if (msg.includes('readerSessionBusy')) return 'Czytnik jest zajęty. Poczekaj chwilę i spróbuj ponownie.';
+    if (msg.includes('readerNotAvailable') || msg.includes('readerInitializationFailed')) return 'Czytnik tymczasowo niedostępny. Spróbuj ponownie za chwilę.';
+    if (msg.includes('readerServiceConnection')) return 'Błąd połączenia z systemem. Zamknij aplikację i otwórz ponownie.';
+    if (msg.includes('insufficient_funds') || msg.toLowerCase().includes('insufficient funds')) return 'Niewystarczające środki na karcie.';
+    if (msg.includes('do_not_honor') || msg.includes('card_velocity_exceeded')) return 'Karta zablokowana przez bank. Poproś klienta o inną kartę.';
+    if (msg.includes('expired_card')) return 'Karta wygasła. Poproś klienta o inną kartę.';
+    if (msg.includes('card_not_supported') || msg.includes('feature_not_supported') || msg.includes('cardNotSupported')) return 'Ta karta nie obsługuje płatności zbliżeniowych. Poproś klienta o inną kartę lub Apple Pay.';
+    if (msg.includes('declined') || msg.includes('paymentCardDeclined')) return 'Karta odrzucona. Poproś klienta o inną kartę lub Apple Pay.';
+    if (msg.includes('pinEntryFailed') || msg.includes('pinNotAllowed')) return 'Błąd wprowadzania PIN. Spróbuj ponownie lub użyj innej karty.';
+    if (msg.includes('invalidAmount')) return 'Nieprawidłowa kwota. Wróć i wprowadź kwotę ponownie.';
     if (msg.includes('No reader')) return 'Nie znaleziono czytnika.';
     if (msg.includes('location')) return 'Brak lokalizacji Stripe. Wyloguj się i zaloguj ponownie.';
-    if (msg.includes('server') || msg.includes('Server') || msg.includes('500') || msg.includes('503')) return 'Błąd serwera. Spróbuj za chwilę.';
+    if (msg.includes('server') || msg.includes('Server') || msg.includes('500') || msg.includes('503') || msg.includes('readerServiceError')) return 'Błąd serwera. Spróbuj za chwilę.';
     return msg;
   }, []);
 
@@ -93,6 +159,10 @@ export default function TapScreen({ navigation, route }: any) {
         throw new Error(collectError.message);
       }
 
+      // Wymaganie Apple 5.6: ekran "przetwarzanie" po odczycie karty (TTP screen zniknął)
+      setStatus('confirming');
+      statusRef.current = 'confirming';
+
       const { paymentIntent: confirmedPI, error: confirmError } = await confirmPaymentIntent({ paymentIntent: collectedPI! });
       if (confirmError) throw new Error(confirmError.message);
 
@@ -111,16 +181,31 @@ export default function TapScreen({ navigation, route }: any) {
         last4: details?.last4 ?? '****',
       });
     } catch (error: any) {
+      // Anuluj Payment Intent jeśli płatność nie doszła do skutku (odmowa, brak środków itp.)
+      // Pozwala na czysty retry bez otwartych PI w tle
+      if (paymentIntentIdRef.current) {
+        const accountId = await AsyncStorage.getItem('stripeAccountId').catch(() => null);
+        if (accountId) {
+          apiFetch(`${API_URL}/api/cancel-payment-intent`, {
+            method: 'POST',
+            body: JSON.stringify({
+              paymentIntentId: paymentIntentIdRef.current,
+              stripeAccountId: accountId,
+            }),
+          }).catch(() => {});
+        }
+        paymentIntentIdRef.current = null;
+      }
       setStatus('error');
       setErrorMsg(translateError(error.message || ''));
     }
   }, [amount, amountZl, navigation, collectPaymentMethod, confirmPaymentIntent, retrievePaymentIntent, translateError]);
 
   useEffect(() => {
-    if (!amount || amount < 200) { navigation.goBack(); return; }
+    if (!amount || amount < 500) { navigation.goBack(); return; }
     initializeReader();
     return () => {
-      if (statusRef.current !== 'processing') {
+      if (statusRef.current !== 'processing' && statusRef.current !== 'confirming') {
         disconnectReader().catch(() => {});
         // Anuluj niezakończony Payment Intent — czyści dashboard i zapobiega Incomplete
         if (paymentIntentIdRef.current) {
@@ -215,9 +300,9 @@ export default function TapScreen({ navigation, route }: any) {
       {/* Góra — przycisk powrotu + merchant */}
       <View style={s.topBar}>
         <TouchableOpacity
-          style={[s.back, status === 'processing' && { opacity: 0.3 }]}
+          style={[s.back, (status === 'processing' || status === 'confirming') && { opacity: 0.3 }]}
           onPress={() => navigation.goBack()}
-          disabled={status === 'processing'}
+          disabled={status === 'processing' || status === 'confirming'}
         >
           <Text style={s.backIcon}>←</Text>
         </TouchableOpacity>
@@ -251,30 +336,46 @@ export default function TapScreen({ navigation, route }: any) {
             <Text style={s.statusPillText}>Oczekiwanie na płatność...</Text>
           </View>
         )}
+        {status === 'confirming' && (
+          <View style={s.statusPill}>
+            <ActivityIndicator size="small" color={C.primaryLight} style={{ marginRight: 8 }} />
+            <Text style={s.statusPillText}>Przetwarzanie płatności...</Text>
+          </View>
+        )}
         {status === 'error' && (
           <>
             <View style={s.errorPill}>
               <Text style={s.errorPillText}>{errorMsg}</Text>
             </View>
-            {retryCount < MAX_RETRIES ? (
+            {isCardError(errorMsg) || retryCount >= MAX_RETRIES ? (
+              <TouchableOpacity style={s.retryBtn} onPress={() => navigation.goBack()}>
+                <Text style={s.retryText}>Wróć</Text>
+              </TouchableOpacity>
+            ) : (
               <TouchableOpacity style={s.retryBtn} onPress={() => { setRetryCount(c => c + 1); initializeReader(); }}>
                 <Text style={s.retryText}>Spróbuj ponownie ({MAX_RETRIES - retryCount} prób pozostało)</Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={s.retryBtn} onPress={() => navigation.goBack()}>
-                <Text style={s.retryText}>Wróć i spróbuj ponownie</Text>
-              </TouchableOpacity>
             )}
+            <TouchableOpacity style={s.receiptBtn} onPress={() => setReceiptModalVisible(true)} activeOpacity={0.8}>
+              <Text style={s.receiptBtnText}>Wyślij potwierdzenie na email</Text>
+            </TouchableOpacity>
           </>
         )}
       </View>
 
       {/* Dół — metody płatności */}
       <View style={s.infoSection}>
+        {status !== 'processing' && status !== 'confirming' && (
+          <View style={s.readyNote}>
+            <Text style={s.readyNoteText}>
+              Upewnij się, że klient jest gotowy do płatności. Zainicjowana transakcja powinna zostać zrealizowana.
+            </Text>
+          </View>
+        )}
         <View style={s.infoSectionDivider} />
         <Text style={s.infoSectionLabel}>Akceptowane metody płatności</Text>
         <View style={s.methodsRow}>
-          {['VISA', 'Mastercard', 'AMEX', 'Apple Pay'].map(m => (
+          {['VISA', 'Mastercard', 'Google Pay', 'Apple Pay'].map(m => (
             <View key={m} style={s.methodChip}>
               <Text style={s.methodChipText}>{m}</Text>
             </View>
@@ -283,7 +384,7 @@ export default function TapScreen({ navigation, route }: any) {
         <View style={s.infoGrid}>
           {[
             'Brak dodatkowego\nsprzętu',
-            'Wypłata na konto\n1-2 dni robocze',
+            'Wypłata na konto\nw 2–3 dni',
             'Szyfrowanie\nend-to-end',
             'Zgodność z\nnormą PCI DSS',
           ].map((txt) => (
@@ -295,6 +396,47 @@ export default function TapScreen({ navigation, route }: any) {
         </View>
       </View>
 
+      {/* Modal paragonu po odrzuconej transakcji (wymaganie Apple 5.10) */}
+      <Modal visible={receiptModalVisible} transparent animationType="fade" onRequestClose={() => setReceiptModalVisible(false)}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={s.modalCard}>
+            {receiptSent ? (
+              <View style={s.sentWrap}>
+                <Text style={s.sentCheck}>✓</Text>
+                <Text style={s.sentText}>Wysłano!</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={s.modalTitle}>Potwierdzenie transakcji</Text>
+                <Text style={s.modalSub}>Podaj email klienta — wyślemy informację o transakcji na kwotę {(amount / 100).toFixed(2)} zł</Text>
+                <TextInput
+                  style={s.emailInput}
+                  placeholder="email@klienta.pl"
+                  placeholderTextColor={C.text3}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={receiptEmail}
+                  onChangeText={setReceiptEmail}
+                  autoFocus
+                />
+                {receiptError ? <Text style={s.errorText}>{receiptError}</Text> : null}
+                <TouchableOpacity
+                  style={[s.sendBtn, (!isValidEmail(receiptEmail) || receiptSending) && s.sendBtnDisabled]}
+                  onPress={sendDeclinedReceipt}
+                  disabled={!isValidEmail(receiptEmail) || receiptSending}
+                  activeOpacity={0.85}
+                >
+                  {receiptSending ? <ActivityIndicator color="#fff" /> : <Text style={s.sendBtnText}>Wyślij</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={s.cancelBtn} onPress={() => setReceiptModalVisible(false)}>
+                  <Text style={s.cancelBtnText}>Pomiń</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -365,6 +507,12 @@ const s = StyleSheet.create({
 
   // Info section
   infoSection: { paddingHorizontal: 24, paddingBottom: 24 },
+  readyNote: {
+    marginBottom: 14, paddingVertical: 10, paddingHorizontal: 14,
+    borderRadius: 10, backgroundColor: 'rgba(99,102,241,0.06)',
+    borderWidth: 1, borderColor: 'rgba(99,102,241,0.15)',
+  },
+  readyNoteText: { fontSize: 11, color: C.text3, textAlign: 'center', lineHeight: 16 },
   infoSectionDivider: { height: 1, backgroundColor: C.cardBorder, marginBottom: 16 },
   infoSectionLabel: {
     fontSize: 10, color: C.text3, fontWeight: '700',
@@ -390,5 +538,24 @@ const s = StyleSheet.create({
   },
   infoGridIconText: { fontSize: 10, color: C.success, fontWeight: '800' },
   infoGridText: { fontSize: 11, color: C.text3, fontWeight: '500', lineHeight: 16, flex: 1 },
-
+  receiptBtn: {
+    marginTop: 12, paddingVertical: 14, paddingHorizontal: 24,
+    borderRadius: 16, borderWidth: 1, borderColor: C.cardBorder,
+    backgroundColor: C.card, alignItems: 'center',
+  },
+  receiptBtnText: { fontSize: 13, fontWeight: '700', color: C.primaryLight },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 32 },
+  modalCard: { width: '100%', backgroundColor: '#13102a', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, borderWidth: 1, borderColor: C.cardBorder },
+  modalTitle: { fontSize: 20, fontWeight: '900', color: C.text1, marginBottom: 8, letterSpacing: -0.5 },
+  modalSub: { fontSize: 13, color: C.text3, marginBottom: 20, lineHeight: 20 },
+  emailInput: { borderWidth: 1.5, borderColor: C.cardBorder, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 18, color: C.text1, fontSize: 16, fontWeight: '600', backgroundColor: C.card, marginBottom: 14 },
+  sendBtn: { paddingVertical: 18, borderRadius: 18, backgroundColor: C.primary, alignItems: 'center', marginBottom: 10 },
+  sendBtnDisabled: { backgroundColor: C.text4 },
+  sendBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  cancelBtn: { alignItems: 'center', paddingVertical: 12 },
+  cancelBtnText: { color: C.text3, fontSize: 14, fontWeight: '600' },
+  errorText: { fontSize: 12, color: C.error ?? '#f87171', textAlign: 'center', marginBottom: 8 },
+  sentWrap: { alignItems: 'center', paddingVertical: 24 },
+  sentCheck: { fontSize: 48, color: C.success, marginBottom: 8 },
+  sentText: { fontSize: 22, fontWeight: '900', color: C.success },
 });

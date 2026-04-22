@@ -30,9 +30,6 @@ export const apiFetch = async (url: string, options: RequestInit = {}): Promise<
         ...(options.headers as Record<string, string>),
       },
     });
-    if (response.status === 401) {
-      await AsyncStorage.removeItem('authToken');
-    }
     return response;
   } finally {
     if (timeout !== null) clearTimeout(timeout);

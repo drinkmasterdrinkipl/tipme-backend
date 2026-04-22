@@ -122,8 +122,8 @@ export default function StatsScreen() {
   const average     = count > 0 ? (Number(stats?.average) || total / count) : 0;
   // Rzeczywiste opłaty ze Stripe (gdy SIMULATED=false)
   // W trybie SIMULATED szacujemy dla pokazania UI
-  const stripeFee   = stats?.stripeFee   ?? (total * 0.014 + count * 1.00);
-  const platformFee = stats?.platformFee ?? total * 0.06;
+  const stripeFee   = stats?.stripeFee   ?? (total * 0.014 + count * 0.25);
+  const platformFee = stats?.platformFee ?? total * 0.07;
   const net         = stats?.net         ?? Math.max(0, total - stripeFee - platformFee);
 
   const isToday = selectedDate === todayStr();
@@ -177,7 +177,7 @@ export default function StatsScreen() {
                 <Text style={s.breakdownTitle}>Rozliczenie</Text>
                 {[
                   ['Napiwki brutto', `${total.toFixed(2)} zł`, false],
-                  ['Prowizja Tip For Me (6%)', `−${platformFee.toFixed(2)} zł`, false],
+                  ['Prowizja Tip For Me (7%)', `−${platformFee.toFixed(2)} zł`, false],
                   ['Opłata Stripe (rzeczywista)', `−${stripeFee.toFixed(2)} zł`, false],
                   ['Twój zarobek netto', `${net.toFixed(2)} zł`, true],
                 ].map(([label, val, highlight], i) => (

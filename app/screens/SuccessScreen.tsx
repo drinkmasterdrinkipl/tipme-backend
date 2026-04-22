@@ -76,6 +76,7 @@ export default function SuccessScreen({ navigation, route }: any) {
           </View>
         </View>
 
+        <Text style={s.appName}>Tip For Me</Text>
         <Text style={s.msg}>{msg}</Text>
         <Text style={s.amount}>{amount}<Text style={s.amountCurr}> zł</Text></Text>
         <Text style={s.detail}>{paymentMethod} ••{last4} · {time}</Text>
@@ -88,12 +89,12 @@ export default function SuccessScreen({ navigation, route }: any) {
           <View style={s.infoDivider} />
           <View style={s.infoRow}>
             <Text style={s.infoLabel}>WYPŁATA</Text>
-            <Text style={s.infoValue}>Co piątek</Text>
+            <Text style={s.infoValue}>2–3 dni robocze</Text>
           </View>
           <View style={s.infoDivider} />
           <View style={s.infoRow}>
             <Text style={s.infoLabel}>PLATFORMA</Text>
-            <Text style={s.infoValue}>Stripe Connect</Text>
+            <Text style={s.infoValue}>Tip For Me</Text>
           </View>
         </View>
 
@@ -168,6 +169,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.25, shadowRadius: 32,
   },
   checkMark: { fontSize: 36, color: C.success, fontWeight: '900' },
+  appName: { fontSize: 13, fontWeight: '700', color: C.text3, letterSpacing: 1, marginBottom: 8 },
   msg: { fontSize: 22, fontWeight: '800', color: C.text1, letterSpacing: -0.5, marginBottom: 4 },
   amount: { fontSize: 64, fontWeight: '900', color: C.success, letterSpacing: -4, lineHeight: 68 },
   amountCurr: { fontSize: 28, fontWeight: '700', color: C.success },

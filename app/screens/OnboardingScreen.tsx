@@ -14,18 +14,20 @@ import {
   Linking,
   Alert,
   ActivityIndicator,
+  Keyboard,
+  ScrollView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 
 export default function OnboardingScreen({ navigation, onComplete }: any) {
-  const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'login' | 'set-password' | 'stripe' | 'done'>('welcome');
-  const [migrationAccountId, setMigrationAccountId] = useState('');
+  const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'login' | 'stripe' | 'done' | 'forgot-password' | 'forgot-sent'>('welcome');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [pollCount, setPollCount] = useState(0);
   const [statusMsg, setStatusMsg] = useState('');
@@ -62,16 +64,25 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         body: JSON.stringify({ email, firstName, lastName, password }),
       });
 
-      const { accountId, onboardingUrl, error } = await res.json();
+      const data = await res.json();
+      const { accountId, onboardingUrl } = data;
       if (res.status === 409) {
-        Alert.alert(
-          'Masz już konto',
-          'Konto z tym emailem już istnieje. Zaloguj się zamiast rejestrować.',
-          [{ text: 'Zaloguj się', onPress: () => setStep('login') }, { text: 'Anuluj', style: 'cancel' }]
-        );
+        if (data.incompleteRegistration) {
+          Alert.alert(
+            'Niedokończona rejestracja',
+            'Masz niedokończoną rejestrację na ten email. Zaloguj się aby kontynuować.',
+            [{ text: 'Zaloguj się', onPress: () => setStep('login') }, { text: 'Anuluj', style: 'cancel' }]
+          );
+        } else {
+          Alert.alert(
+            'Masz już konto',
+            'Konto z tym emailem już istnieje. Zaloguj się zamiast rejestrować.',
+            [{ text: 'Zaloguj się', onPress: () => setStep('login') }, { text: 'Anuluj', style: 'cancel' }]
+          );
+        }
         return;
       }
-      if (!res.ok || error) throw new Error(error || `Błąd serwera (${res.status})`);
+      if (!res.ok || data.error) throw new Error(data.error || `Błąd serwera (${res.status})`);
 
       // Zapisz ID konta lokalnie
       await AsyncStorage.setItem('stripeAccountId', accountId);
@@ -82,7 +93,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       setOnboardingUrl(onboardingUrl);
       navigation.navigate('StripeWebView', {
         url: onboardingUrl,
-        onDone: () => checkStripeStatus(),
+        onDone: () => setTimeout(() => checkStripeStatus(), 3000),
       });
       setStep('stripe');
     } catch (error: any) {
@@ -97,13 +108,15 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   // ============================================
   const loginWithEmail = async () => {
     if (!isValidEmail(email)) {
-      Alert.alert('Błąd', 'Podaj poprawny adres email');
+      setLoginError('Podaj poprawny adres email');
       return;
     }
     if (!password) {
-      Alert.alert('Błąd', 'Podaj hasło');
+      setLoginError('Podaj hasło');
       return;
     }
+    Keyboard.dismiss();
+    setLoginError('');
     setLoading(true);
     try {
       const controller = new AbortController();
@@ -123,65 +136,71 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       }
       const data = await res.json();
 
-      // Konto bez hasła — przekieruj do ustawienia hasła
-      if (res.status === 403 && data.needsPassword) {
-        setMigrationAccountId(data.accountId);
-        await AsyncStorage.setItem('stripeAccountId', data.accountId);
-        await AsyncStorage.setItem('userEmail', email);
+      // Konto bez hasła — od razu przekieruj do resetu przez email
+      if (res.status === 403 && data.needsPasswordReset) {
         setPassword('');
-        setStep('set-password');
+        setStep('forgot-password');
         return;
       }
 
-      if (!res.ok) throw new Error(data.error || 'Błąd serwera');
+      if (!res.ok) {
+        setLoginError(data.error || 'Nieprawidłowy email lub hasło');
+        return;
+      }
 
       await AsyncStorage.setItem('stripeAccountId', data.accountId);
       await AsyncStorage.setItem('userEmail', email);
-      if (data.token) await AsyncStorage.setItem('authToken', data.token);
+      const token = data.token || data.authToken || data.access_token;
+      if (token) await AsyncStorage.setItem('authToken', token);
 
       if (data.chargesEnabled) {
-        await ensureLocationId(data.accountId);
+        ensureLocationId(data.accountId).catch(() => {});
         if (onComplete) onComplete();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      } else if (!data.detailsSubmitted && data.onboardingUrl) {
+        // Niedokończona rejestracja — otwórz Stripe od razu
+        setOnboardingUrl(data.onboardingUrl);
+        navigation.navigate('StripeWebView', {
+          url: data.onboardingUrl,
+          onDone: () => setTimeout(() => checkStripeStatus(), 3000),
+        });
+        setStep('stripe');
       } else {
+        // Konto założone, Stripe jeszcze weryfikuje
         setStep('stripe');
       }
     } catch (error: any) {
-      if (mountedRef.current) Alert.alert('Błąd', error.message || 'Nieprawidłowy email lub hasło');
+      if (mountedRef.current) setLoginError(error.message || 'Brak połączenia — sprawdź internet');
     } finally {
       if (mountedRef.current) setLoading(false);
     }
   };
 
-  const setPasswordForMigration = async () => {
-    if (password.length < 8) {
-      Alert.alert('Błąd', 'Hasło musi mieć minimum 8 znaków');
+  // ============================================
+  // Reset hasła — wyślij email
+  // ============================================
+  const sendForgotPassword = async () => {
+    if (!isValidEmail(email)) {
+      Alert.alert('Błąd', 'Podaj poprawny adres email');
       return;
     }
+    Keyboard.dismiss();
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/api/auth/set-password`, {
+      const res = await apiFetch(`${API_URL}/api/auth/forgot-password`, {
         method: 'POST',
-        body: JSON.stringify({ accountId: migrationAccountId, email, password }),
+        body: JSON.stringify({ email }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Błąd serwera');
-
-      if (data.token) await AsyncStorage.setItem('authToken', data.token);
-      await ensureLocationId(migrationAccountId);
-
-      if (data.chargesEnabled) {
-        if (onComplete) onComplete();
-        else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      } else {
-        setStep('stripe');
-      }
-    } catch (error: any) {
-      if (mountedRef.current) Alert.alert('Błąd', error.message || 'Nie udało się ustawić hasła');
+      // Zawsze pokazujemy sukces (backend nie ujawnia czy konto istnieje)
+      if (mountedRef.current) setStep('forgot-sent');
+    } catch {
+      // Nawet przy błędzie sieci — nie ujawniamy szczegółów
+      if (mountedRef.current) setStep('forgot-sent');
     } finally {
       if (mountedRef.current) setLoading(false);
     }
   };
+
 
   // ============================================
   // Helper — tworzy lokalizację Stripe Terminal jeśli brak
@@ -190,7 +209,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   const ensureLocationId = async (accountId: string) => {
     const existing = await AsyncStorage.getItem('stripeLocationId');
     if (existing) return;
-    if (ensureLocationRef.current) return; // już trwa tworzenie
+    if (ensureLocationRef.current) return;
     ensureLocationRef.current = true;
     try {
       const locRes = await apiFetch(`${API_URL}/api/create-location`, {
@@ -198,9 +217,8 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         body: JSON.stringify({ stripeAccountId: accountId, displayName: 'Tip For Me' }),
       });
       const locData = await locRes.json();
-      if (!locRes.ok) throw new Error(`Błąd lokalizacji: ${locData.error}`);
       if (locData.locationId) await AsyncStorage.setItem('stripeLocationId', locData.locationId);
-    } finally {
+    } catch { /* nie blokuj logowania jeśli lokalizacja nie może być utworzona */ } finally {
       ensureLocationRef.current = false;
     }
   };
@@ -215,7 +233,13 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
     try {
       const accountId = await AsyncStorage.getItem('stripeAccountId');
       if (!accountId) {
-        if (!silent && mountedRef.current) Alert.alert('Błąd', 'Brak ID konta. Zacznij rejestrację od nowa.');
+        if (!silent && mountedRef.current) {
+          Alert.alert(
+            'Sesja wygasła',
+            'Zaloguj się aby kontynuować.',
+            [{ text: 'Zaloguj się', onPress: () => setStep('login') }, { text: 'OK', style: 'cancel' }]
+          );
+        }
         return;
       }
       const res = await apiFetch(`${API_URL}/api/account-status/${accountId}`);
@@ -230,15 +254,6 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         if (!mountedRef.current) return;
         if (onComplete) onComplete();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
-      } else if (!data.detailsSubmitted) {
-        // Zapisane ID wskazuje na złe konto — wyczyść i wróć do logowania
-        await AsyncStorage.multiRemove([
-          'stripeAccountId', 'authToken', 'stripeLocationId', 'userEmail',
-          'tapToPayEnabled', 'tapToPayWelcomeShown', 'tapToPayEducationShown',
-        ]).catch(() => {});
-        if (!mountedRef.current) return;
-        setStatusMsg('');
-        setStep('login');
       } else {
         if (mountedRef.current) setStatusMsg('Konto jeszcze niezweryfikowane. Stripe może potrzebować do 24h.');
       }
@@ -278,7 +293,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   if (step === 'welcome') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.logoIcon}>💜</Text>
           <Text style={styles.logoText}>Tip For Me</Text>
           <Text style={styles.tagline}>
@@ -289,7 +304,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             {[
               ['📱', 'Twój telefon = terminal'],
               ['💳', 'Klient przykłada kartę'],
-              ['⚡', 'Automatyczna wypłata na konto'],
+              ['⚡', 'Wypłata na konto bankowe (2-3 dni)'],
               ['📊', 'Statystyki w czasie rzeczywistym'],
             ].map(([icon, text], i) => (
               <View key={i} style={styles.featureRow}>
@@ -313,11 +328,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             <Text style={styles.secondaryBtnText}>Mam już konto — zaloguj się</Text>
           </TouchableOpacity>
 
-          <Text style={styles.taxNote}>
-            Napiwki stanowią Twój przychód i podlegają opodatkowaniu PIT. Korzystając z aplikacji akceptujesz{' '}
-            <Text style={styles.taxNoteLink}>Regulamin</Text>.
-          </Text>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -328,7 +339,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   if (step === 'prepare') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.stepIcon}>📋</Text>
           <Text style={styles.stepTitle}>Przygotuj się</Text>
           <Text style={styles.stepDesc}>
@@ -354,6 +365,12 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             ))}
           </View>
 
+          <View style={styles.peselTip}>
+            <Text style={styles.peselTipText}>
+              💡 <Text style={{ fontWeight: '700', color: '#e0d4f7' }}>Obywatel Polski?</Text> Przygotuj też numer PESEL — przyspieszy weryfikację konta Stripe.
+            </Text>
+          </View>
+
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={() => setStep('register')}
@@ -367,7 +384,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           >
             <Text style={styles.secondaryBtnText}>Wróć</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -378,7 +395,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   if (step === 'register') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.stepTitle}>Twoje dane</Text>
           <Text style={styles.stepDesc}>
             Podaj dane które Stripe wstępnie wypełni za Ciebie
@@ -430,39 +447,33 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             accessibilityLabel="Hasło"
           />
 
-          {/* Prowizja platformy — wymóg Stripe (application_fee disclosure) */}
-          <View style={styles.feeBox}>
-            <Text style={styles.feeTitle}>Prowizja platformy: 5%</Text>
-            <Text style={styles.feeDesc}>
-              Tip For Me pobiera 5% od każdego napiwku jako opłatę za usługę. Pozostałe środki trafiają automatycznie na Twoje konto bankowe.
-            </Text>
-          </View>
-
           {/* Zgoda na regulamin — wymóg RODO */}
-          <TouchableOpacity
-            style={styles.termsRow}
-            onPress={() => setTermsAccepted(!termsAccepted)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
-              {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
-            </View>
+          <View style={styles.termsRow}>
+            <TouchableOpacity
+              onPress={() => setTermsAccepted(!termsAccepted)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
+                {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+            </TouchableOpacity>
             <Text style={styles.termsText}>
               Akceptuję{' '}
-              <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tipme.drinki.pl/regulamin')}>
+              <Text style={styles.termsLink} onPress={() => navigation.navigate('StripeWebView', { url: 'https://tipforme.app/regulamin.html' })}>
                 Regulamin
               </Text>
               {' '}i{' '}
-              <Text style={styles.termsLink} onPress={() => Linking.openURL('https://tipme.drinki.pl/polityka-prywatnosci')}>
+              <Text style={styles.termsLink} onPress={() => navigation.navigate('StripeWebView', { url: 'https://tipforme.app/polityka-prywatnosci.html' })}>
                 Politykę Prywatności
               </Text>
-              {' '}Tip For Me, w tym prowizję 5% oraz przetwarzanie danych osobowych przez{' '}
+              {' '}Tip For Me oraz przetwarzanie danych osobowych przez{' '}
               <Text style={styles.termsLink} onPress={() => Linking.openURL('https://stripe.com/pl/privacy')}>
                 Stripe
               </Text>
               .
             </Text>
-          </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.primaryBtn, (loading || !termsAccepted) && styles.btnDisabled]}
@@ -476,6 +487,12 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             )}
           </TouchableOpacity>
 
+          <View style={styles.usageNote}>
+            <Text style={styles.usageNoteText}>
+              Aplikacja służy wyłącznie do przyjmowania rzeczywistych napiwków od klientów. Konta używane niezgodnie z tym celem mogą zostać zawieszone.
+            </Text>
+          </View>
+
           <Text style={styles.infoText}>
             Stripe to bezpieczna platforma płatności.{'\n'}
             Twoje dane są chronione przez Stripe (licencja EMI UE).
@@ -487,7 +504,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           >
             <Text style={styles.secondaryBtnText}>Mam już konto — zaloguj się</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -498,9 +515,10 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   if (step === 'login') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.stepIcon}>🔑</Text>
           <Text style={styles.stepTitle}>Zaloguj się</Text>
+          {/* loginError czyszczony przy onChangeText — tu tylko wyświetlamy */}
           <Text style={styles.stepDesc}>
             Podaj email i hasło użyte przy rejestracji
           </Text>
@@ -512,21 +530,31 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            textContentType="emailAddress"
+            autoComplete="email"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={v => { setEmail(v); setLoginError(''); }}
             accessibilityLabel="Adres email"
           />
           <TextInput
-            style={styles.emailInput}
+            style={[styles.emailInput, loginError ? { borderColor: 'rgba(239,68,68,0.5)' } : {}]}
             placeholder="Hasło"
             placeholderTextColor="#444"
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
+            textContentType="password"
+            autoComplete="password"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={v => { setPassword(v); setLoginError(''); }}
             accessibilityLabel="Hasło"
           />
+
+          {loginError ? (
+            <Text style={{ color: '#ef4444', fontSize: 13, marginTop: -12, marginBottom: 14, textAlign: 'center' }}>
+              {loginError}
+            </Text>
+          ) : null}
 
           <TouchableOpacity
             style={[styles.primaryBtn, (loading || !isValidEmail(email) || !password) && styles.btnDisabled]}
@@ -541,12 +569,21 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={{ marginTop: 8, paddingVertical: 10 }}
+            onPress={() => { setPassword(''); setStep('forgot-password'); }}
+          >
+            <Text style={{ color: '#7c3aed', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+              Zapomniałeś hasła?
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.secondaryBtn}
             onPress={() => setStep('welcome')}
           >
             <Text style={styles.secondaryBtnText}>Wróć</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -557,7 +594,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
   if (step === 'stripe') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.stepIcon}>⚡</Text>
           <Text style={styles.stepTitle}>Oczekiwanie na weryfikację</Text>
           <Text style={styles.stepDesc}>
@@ -597,47 +634,95 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           >
             <Text style={styles.secondaryBtnText}>Otwórz Stripe ponownie</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+
+  // ============================================
+  // EKRAN ZAPOMNIAŁEM HASŁA — wpisz email
+  // ============================================
+  if (step === 'forgot-password') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <Text style={styles.stepIcon}>📧</Text>
+          <Text style={styles.stepTitle}>Resetuj hasło</Text>
+          <Text style={styles.stepDesc}>
+            Podaj adres email użyty przy rejestracji.{'\n'}
+            Wyślemy Ci link do ustawienia nowego hasła.
+          </Text>
+
+          <TextInput
+            style={styles.emailInput}
+            placeholder="jan@example.com"
+            placeholderTextColor="#444"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="emailAddress"
+            autoComplete="email"
+            value={email}
+            onChangeText={setEmail}
+            accessibilityLabel="Adres email"
+          />
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, (loading || !isValidEmail(email)) && styles.btnDisabled]}
+            onPress={sendForgotPassword}
+            disabled={loading || !isValidEmail(email)}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryBtnText}>Wyślij link resetujący →</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryBtn}
+            onPress={() => setStep('login')}
+          >
+            <Text style={styles.secondaryBtnText}>Wróć do logowania</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </SafeAreaView>
     );
   }
 
   // ============================================
-  // EKRAN USTAWIENIA HASŁA (migracja starych kont)
+  // EKRAN POTWIERDZENIA WYSYŁKI EMAILA
   // ============================================
-  if (step === 'set-password') {
+  if (step === 'forgot-sent') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.stepIcon}>🔐</Text>
-          <Text style={styles.stepTitle}>Ustaw hasło</Text>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <Text style={styles.stepIcon}>✉️</Text>
+          <Text style={styles.stepTitle}>Sprawdź email</Text>
           <Text style={styles.stepDesc}>
-            Twoje konto wymaga ustawienia hasła aby się zalogować.
+            Jeśli konto z tym adresem istnieje,{'\n'}
+            za chwilę otrzymasz email z linkiem resetującym.{'\n\n'}
+            <Text style={{ color: '#666', fontSize: 13 }}>
+              Link wygasa po 1 godzinie.{'\n'}
+              Sprawdź też folder spam.
+            </Text>
           </Text>
 
-          <TextInput
-            style={styles.emailInput}
-            placeholder="Nowe hasło (min. 8 znaków)"
-            placeholderTextColor="#444"
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={password}
-            onChangeText={setPassword}
-            accessibilityLabel="Nowe hasło"
-          />
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => setStep('login')}
+          >
+            <Text style={styles.primaryBtnText}>Wróć do logowania</Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.primaryBtn, (loading || password.length < 8) && styles.btnDisabled]}
-            onPress={setPasswordForMigration}
-            disabled={loading || password.length < 8}
+            style={styles.secondaryBtn}
+            onPress={() => { setStep('forgot-password'); }}
           >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.primaryBtnText}>Ustaw hasło i zaloguj →</Text>
-            }
+            <Text style={styles.secondaryBtnText}>Wyślij ponownie</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -651,10 +736,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#0c0a13',
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 30,
+    paddingVertical: 32,
   },
   logoIcon: {
     fontSize: 64,
@@ -756,6 +842,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+  usageNote: {
+    marginTop: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  usageNoteText: {
+    fontSize: 11,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
   termsRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -839,6 +940,20 @@ const styles = StyleSheet.create({
   taxNoteLink: {
     color: 'rgba(192,132,252,0.6)',
     textDecorationLine: 'underline',
+  },
+  peselTip: {
+    width: '100%',
+    backgroundColor: 'rgba(168,85,247,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.2)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 20,
+  },
+  peselTipText: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    lineHeight: 20,
   },
   prepareList: {
     width: '100%',

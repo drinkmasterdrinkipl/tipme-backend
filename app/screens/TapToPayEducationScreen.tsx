@@ -8,7 +8,7 @@ import React, { useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, useWindowDimensions,
+  ScrollView, useWindowDimensions, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -35,13 +35,19 @@ const SLIDES = [
     icon: '✓',
     title: 'Potwierdzenie płatności',
     desc: 'Po udanej płatności zobaczysz ekran sukcesu z kwotą i metodą płatności. Możesz wysłać potwierdzenie na email klienta.',
-    tip: 'Środki trafiają na Twoje konto Stripe i są wypłacane w ciągu 1–2 dni roboczych.',
+    tip: 'Środki trafiają na Twoje konto Stripe i są automatycznie wypłacane na konto bankowe w ciągu 2–3 dni roboczych.',
   },
   {
     icon: '🔢',
     title: 'Wprowadzanie PIN',
     desc: 'Przy niektórych transakcjach klient zostanie poproszony o wprowadzenie PIN-u bezpośrednio na ekranie Twojego iPhone\'a. Jest to bezpieczne i szyfrowane przez Apple.',
     tip: 'Nie dotykaj ekranu podczas gdy klient wpisuje PIN — zapewnia to prywatność klienta.',
+  },
+  {
+    icon: '❌',
+    title: 'Gdy karta nie działa',
+    desc: 'Jeśli płatność zostanie odrzucona, poproś klienta o inną kartę, Apple Pay lub portfel cyfrowy. Tap to Pay akceptuje tylko karty zbliżeniowe.',
+    tip: 'Stare karty Amex lub karty bez NFC nie obsługują płatności zbliżeniowych — to normalne, po prostu poproś o inną metodę.',
   },
   {
     icon: '⚙️',
@@ -55,6 +61,7 @@ export default function TapToPayEducationScreen({ navigation, route }: any) {
   const { onComplete } = route.params ?? {};
   const { width } = useWindowDimensions();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const finishingRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const goToSlide = (index: number) => {
@@ -70,12 +77,31 @@ export default function TapToPayEducationScreen({ navigation, route }: any) {
     }
   };
 
-  const handleFinish = async () => {
-    try {
-      await AsyncStorage.setItem('tapToPayEnabled', 'true');
-      await AsyncStorage.setItem('tapToPayEducationShown', 'true');
-    } catch { /* kontynuuj nawet jeśli AsyncStorage zawiedzie */ }
-    typeof onComplete === 'function' ? onComplete() : navigation.navigate('Main');
+  const handleFinish = () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
+    AsyncStorage.setItem('tapToPayEducationShown', 'true').catch(() => {});
+    if (typeof onComplete === 'function') {
+      try { onComplete(); } catch { }
+    }
+    navigation.goBack();
+    // Wymaganie Apple 3.9: po edukacji zaproś do pierwszej płatności
+    setTimeout(() => {
+      Alert.alert(
+        'Tap to Pay gotowe! 🎉',
+        'Jesteś gotowy do przyjmowania napiwków zbliżeniowo. Chcesz zrobić pierwszą płatność teraz?',
+        [
+          { text: 'Nie teraz', style: 'cancel' },
+          {
+            text: 'Spróbuj teraz →',
+            onPress: () => {
+              navigation.navigate('Main' as never);
+            },
+          },
+        ]
+      );
+    }, 400);
   };
 
   const handleSkip = () => {

@@ -150,7 +150,7 @@ export default function HistoryScreen() {
         {loading ? (
           <ActivityIndicator color={C.primary} style={{ marginVertical: 12 }} />
         ) : (
-          <Text style={s.heroAmount}>{todayTotal.toFixed(0)}<Text style={s.heroCurr}> zł</Text></Text>
+          <Text style={s.heroAmount}>{Number.isInteger(todayTotal) ? todayTotal.toFixed(0) : todayTotal.toFixed(2)}<Text style={s.heroCurr}> zł</Text></Text>
         )}
       </View>
 
@@ -201,14 +201,14 @@ export default function HistoryScreen() {
                 <View style={s.itemRight}>
                   {isRefunded ? (
                     <>
-                      <Text style={s.itemAmountRefunded}>+{tx.amount.toFixed(0)} zł</Text>
+                      <Text style={s.itemAmountRefunded}>+{Number.isInteger(tx.amount) ? tx.amount.toFixed(0) : tx.amount.toFixed(2)} zł</Text>
                       <Text style={s.refundedBadge}>Zwrócono</Text>
                     </>
                   ) : isRefunding ? (
                     <ActivityIndicator size="small" color={C.primary} />
                   ) : (
                     <>
-                      <Text style={s.itemAmount}>+{tx.amount.toFixed(0)} zł</Text>
+                      <Text style={s.itemAmount}>+{Number.isInteger(tx.amount) ? tx.amount.toFixed(0) : tx.amount.toFixed(2)} zł</Text>
                       {canRefund && (
                         <TouchableOpacity style={s.refundBtn} onPress={() => handleRefund(tx)}>
                           <Text style={s.refundBtnText}>Zwróć</Text>

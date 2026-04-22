@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
@@ -19,7 +19,63 @@ export default function AccountDetailsScreen() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
   const mountedRef = useRef(true);
+
+  const exportStatement = useCallback(async () => {
+    setExporting(true);
+    try {
+      const accountId = await AsyncStorage.getItem('stripeAccountId');
+      const email = await AsyncStorage.getItem('userEmail') ?? '';
+      if (!accountId) throw new Error('Brak ID konta');
+
+      const res = await apiFetch(`${API_URL}/api/payouts/${accountId}`);
+      if (!res.ok) throw new Error('Błąd serwera');
+      const json = await res.json();
+      const payouts: any[] = json.payouts || [];
+
+      if (payouts.length === 0) {
+        Alert.alert('Brak danych', 'Nie masz jeszcze żadnych wypłat do wyeksportowania.');
+        return;
+      }
+
+      const now = new Date().toLocaleDateString('pl-PL');
+      const paid = payouts.filter(p => p.status === 'paid');
+      const total = paid.reduce((sum, p) => sum + (p.amount ?? 0), 0);
+      const separator = '─────────────────────────────';
+
+      const rows = payouts.map(p => {
+        const date = new Date((p.arrivalDate ?? p.arrival_date) * 1000).toLocaleDateString('pl-PL');
+        const statusLabel = p.status === 'paid' ? '✓ Wysłano na konto' : p.status === 'failed' ? '✗ Błąd' : '⏳ W toku';
+        const amount = (p.amount ?? 0).toFixed(2);
+        return `${date}   ${statusLabel}\n  Kwota: ${amount} zł`;
+      }).join('\n\n');
+
+      const text = [
+        '💜 TIP FOR ME — ZESTAWIENIE WYPŁAT',
+        separator,
+        `Konto: ${email}`,
+        `Wygenerowano: ${now}`,
+        separator,
+        '',
+        rows,
+        '',
+        separator,
+        `ŁĄCZNIE WYSŁANO NA KONTO: ${total.toFixed(2)} zł`,
+        separator,
+        '',
+        'Kwoty faktycznie wysłane na konto bankowe.',
+        '',
+        'Tip For Me · tipforme.app',
+      ].join('\n');
+
+      await Share.share({ message: text, title: 'Zestawienie wypłat — Tip For Me' });
+    } catch (e: any) {
+      Alert.alert('Błąd', 'Nie udało się wygenerować zestawienia.');
+    } finally {
+      if (mountedRef.current) setExporting(false);
+    }
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -81,8 +137,16 @@ export default function AccountDetailsScreen() {
               />
               <Row
                 label="Weryfikacja"
-                value={data.detailsSubmitted ? '✓ Ukończona' : '✗ Nieukończona'}
-                valueColor={data.detailsSubmitted ? '#22c55e' : C.gold}
+                value={
+                  data.chargesEnabled ? '✓ Zweryfikowane' :
+                  data.detailsSubmitted ? '⏳ W trakcie weryfikacji' :
+                  '✗ Nieukończona'
+                }
+                valueColor={
+                  data.chargesEnabled ? '#22c55e' :
+                  data.detailsSubmitted ? '#f59e0b' :
+                  C.error
+                }
               />
             </View>
 
@@ -105,6 +169,12 @@ export default function AccountDetailsScreen() {
                 <Text style={s.noBankTxt}>Brak podpiętego konta bankowego</Text>
               )}
             </View>
+
+            <TouchableOpacity style={s.exportBtn} onPress={exportStatement} disabled={exporting}>
+              {exporting
+                ? <ActivityIndicator color="#22c55e" />
+                : <Text style={s.exportBtnText}>📄 Pobierz zestawienie wypłat</Text>}
+            </TouchableOpacity>
 
             {!data.detailsSubmitted && (
               <TouchableOpacity
@@ -167,6 +237,12 @@ const s = StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: C.cardBorder,
   },
   retryTxt: { color: C.primaryLight, fontWeight: '700' },
+  exportBtn: {
+    borderRadius: 18, borderWidth: 1.5, borderColor: 'rgba(34,197,94,0.3)',
+    backgroundColor: 'rgba(34,197,94,0.07)', padding: 18,
+    alignItems: 'center', marginBottom: 12,
+  },
+  exportBtnText: { color: '#22c55e', fontSize: 15, fontWeight: '800' },
   completeBtn: {
     backgroundColor: C.primary, borderRadius: 18,
     paddingVertical: 18, alignItems: 'center',

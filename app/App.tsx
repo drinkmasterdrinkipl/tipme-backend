@@ -3,7 +3,7 @@
 // ============================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View, AppState, AppStateStatus, StatusBar } from 'react-native';
+import { Text, View, AppState, AppStateStatus, StatusBar, Linking, Platform } from 'react-native';
 import { AppContext } from './AppContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { C } from './theme';
@@ -13,7 +13,16 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StripeTerminalProvider, useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from './config';
-import { useTapToPayNotification } from './hooks/useTapToPayNotification';
+import * as Notifications from 'expo-notifications';
+
+// Wymaganie Apple 6.3: konfiguracja zachowania powiadomień
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 import HomeScreen from './screens/HomeScreen';
 import TapScreen from './screens/TapScreen';
@@ -27,6 +36,7 @@ import TapToPayWelcomeScreen from './screens/TapToPayWelcomeScreen';
 import TapToPayEducationScreen from './screens/TapToPayEducationScreen';
 import StripeWebViewScreen from './screens/StripeWebViewScreen';
 import AccountDetailsScreen from './screens/AccountDetailsScreen';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -104,12 +114,35 @@ function MainTabs() {
 }
 
 
+// Wymaganie Apple 6.3: wyślij powiadomienie launch o Tap to Pay
+async function scheduleTapToPayLaunchNotification() {
+  try {
+    const alreadySent = await AsyncStorage.getItem('ttpLaunchNotificationSent');
+    if (alreadySent) return;
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') return;
+    if (Platform.OS === 'ios') {
+      await Notifications.setNotificationChannelAsync?.('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance?.DEFAULT ?? 3,
+      }).catch(() => {});
+    }
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Tap to Pay na iPhonie gotowe! 💜',
+        body: 'Zacznij przyjmować napiwki zbliżeniowo — bez żadnego terminala. Otwórz aplikację i spróbuj teraz.',
+        data: { type: 'ttp_launch' },
+      },
+      trigger: { seconds: 3, type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL },
+    });
+    await AsyncStorage.setItem('ttpLaunchNotificationSent', 'true');
+  } catch { /* nieblokujące — powiadomienie to marketing, nie core */ }
+}
+
 export default function App() {
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
 
-  // Wymaganie Apple 3.3 + 6.3: push notification o Tap to Pay na iPhonie (wysyłany raz)
-  useTapToPayNotification(isOnboarded === true);
   const navigationRef = useRef<any>(null);
   const welcomeNavigatedRef = useRef(false);
 
@@ -129,26 +162,49 @@ export default function App() {
     const welcomeShown = await AsyncStorage.getItem('tapToPayWelcomeShown');
     if (!welcomeShown) setShowWelcome(true);
     setIsOnboarded(true);
+    // Wymaganie Apple 6.3: launch push notification o Tap to Pay dla nowego użytkownika
+    scheduleTapToPayLaunchNotification();
   }, []);
 
-  // Po zalogowaniu — jeśli user nie widział welcome, nawiguj do niego
-  // (osobny useEffect zamiast render prop, żeby SettingsScreen mógł też nawigować i przekazać własny onComplete)
-  useEffect(() => {
+
+  const navigateToWelcome = useCallback(() => {
     if (!isOnboarded || !showWelcome || welcomeNavigatedRef.current) return;
-    const t = setTimeout(() => {
-      if (!navigationRef.current) return;
-      welcomeNavigatedRef.current = true;
-      navigationRef.current.navigate('TapToPayWelcome' as never, {
-        onComplete: async () => {
-          await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
-          setShowWelcome(false);
-          welcomeNavigatedRef.current = false;
-          navigationRef.current?.navigate('Main' as never);
-        },
-      } as never);
-    }, 100);
-    return () => clearTimeout(t);
+    if (!navigationRef.current?.isReady()) return;
+    welcomeNavigatedRef.current = true;
+    navigationRef.current.navigate('TapToPayWelcome' as never, {
+      onComplete: () => {
+        setShowWelcome(false);
+        welcomeNavigatedRef.current = false;
+      },
+    } as never);
   }, [isOnboarded, showWelcome]);
+
+  // Odpala się gdy stan się zmienia (np. po handleOnboardingComplete)
+  useEffect(() => { navigateToWelcome(); }, [navigateToWelcome]);
+
+  // Deep link handling — tipforme://reset-password?token=xxx
+  const handleDeepLink = useCallback((url: string | null) => {
+    if (!url) return;
+    try {
+      // Parsuj URL ręcznie (React Native nie ma globalnego URL w starszych wersjach)
+      const tokenMatch = url.match(/[?&]token=([^&]+)/);
+      if (url.includes('reset-password') && tokenMatch) {
+        const token = decodeURIComponent(tokenMatch[1]);
+        // Krótki timeout żeby nawigator zdążył się zamontować
+        setTimeout(() => {
+          navigationRef.current?.navigate('ResetPassword' as never, { token } as never);
+        }, 200);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    // Aplikacja otwarta przez link (zimny start)
+    Linking.getInitialURL().then(handleDeepLink).catch(() => {});
+    // Aplikacja już działała w tle
+    const sub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
+    return () => sub.remove();
+  }, [handleDeepLink]);
 
   const handleLogout = useCallback(() => {
     setIsOnboarded(false);
@@ -178,7 +234,7 @@ export default function App() {
     <SafeAreaProvider>
       <StripeTerminalProvider tokenProvider={fetchTokenProvider} logLevel="none">
         {isOnboarded && <TerminalWarmup />}
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer ref={navigationRef} onReady={navigateToWelcome}>
           {!isOnboarded ? (
             <Stack.Navigator screenOptions={{ headerShown: false }}>
               <Stack.Screen name="Onboarding">
@@ -189,8 +245,9 @@ export default function App() {
                   />
                 )}
               </Stack.Screen>
-              <Stack.Screen name="StripeWebView" component={StripeWebViewScreen} />
+              <Stack.Screen name="StripeWebView" component={StripeWebViewScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
+              <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} options={{ presentation: 'modal' }} />
             </Stack.Navigator>
           ) : (
             <Stack.Navigator
@@ -200,11 +257,16 @@ export default function App() {
               <Stack.Screen name="Main" component={MainTabs} />
               <Stack.Screen name="Tap" component={TapScreen} />
               <Stack.Screen name="Success" component={SuccessScreen} />
-              <Stack.Screen name="TapToPayWelcome" component={TapToPayWelcomeScreen} />
+              <Stack.Screen
+                name="TapToPayWelcome"
+                component={TapToPayWelcomeScreen}
+                options={{ animation: 'none' }}
+              />
               <Stack.Screen name="TapToPayEducation" component={TapToPayEducationScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />
-              <Stack.Screen name="StripeWebView" component={StripeWebViewScreen} />
+              <Stack.Screen name="StripeWebView" component={StripeWebViewScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="AccountDetails" component={AccountDetailsScreen} />
+              <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} options={{ presentation: 'modal' }} />
             </Stack.Navigator>
           )}
         </NavigationContainer>

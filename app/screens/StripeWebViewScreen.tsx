@@ -26,17 +26,26 @@ export default function StripeWebViewScreen({ route, navigation }: any) {
 
   const handleNavigationChange = (navState: any) => {
     if (!mountedRef.current || completedRef.current) return;
-    // Stripe przekierowuje na return_url po ukończeniu onboardingu
-    if (navState.url?.includes('/stripe/success') || navState.url?.includes('return_url')) {
-      completedRef.current = true;
-      navigation.goBack();
-      if (typeof onDone === 'function') onDone();
-    }
     // Stripe przekierowuje na refresh_url gdy sesja wygasła
     if (navState.url?.includes('/stripe/refresh')) {
       completedRef.current = true;
       navigation.goBack();
     }
+  };
+
+  // Przechwytuje URL zanim strona się załaduje — tylko podczas onboardingu (gdy onDone jest przekazane)
+  const handleShouldStartLoad = (request: any): boolean => {
+    if (!mountedRef.current || completedRef.current) return true;
+    if (typeof onDone === 'function' &&
+      (request.url?.includes('/stripe/success') || request.url?.includes('return_url'))) {
+      completedRef.current = true;
+      setTimeout(() => {
+        navigation.goBack();
+        onDone();
+      }, 0);
+      return false;
+    }
+    return true;
   };
 
   return (
@@ -49,13 +58,6 @@ export default function StripeWebViewScreen({ route, navigation }: any) {
         <View style={{ width: 36 }} />
       </View>
 
-      {loading && (
-        <View style={s.loader}>
-          <ActivityIndicator size="large" color={C.primary} />
-          <Text style={s.loaderTxt}>Ładowanie Stripe...</Text>
-        </View>
-      )}
-
       {webError ? (
         <View style={s.errorWrap}>
           <Text style={s.errorTxt}>Nie udało się załadować strony.</Text>
@@ -64,23 +66,32 @@ export default function StripeWebViewScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
       ) : (
-        <WebView
-          ref={webviewRef}
-          source={{ uri: url }}
-          onLoadStart={() => { if (mountedRef.current) setLoading(true); }}
-          onLoadEnd={() => { if (mountedRef.current) setLoading(false); }}
-          onNavigationStateChange={handleNavigationChange}
-          onError={() => { if (mountedRef.current) { setLoading(false); setWebError('error'); } }}
-          style={loading ? { opacity: 0 } : { flex: 1 }}
-          javaScriptEnabled
-          domStorageEnabled
-          startInLoadingState={false}
-          keyboardDisplayRequiresUserAction={false}
-          allowsInlineMediaPlayback
-          scrollEnabled
-          automaticallyAdjustContentInsets={false}
-          contentInsetAdjustmentBehavior="never"
-        />
+        <View style={{ flex: 1 }}>
+          <WebView
+            ref={webviewRef}
+            source={{ uri: url }}
+            onLoadStart={() => { if (mountedRef.current) setLoading(true); }}
+            onLoadEnd={() => { if (mountedRef.current) setLoading(false); }}
+            onNavigationStateChange={handleNavigationChange}
+            onShouldStartLoadWithRequest={handleShouldStartLoad}
+            onError={() => { if (mountedRef.current) { setLoading(false); setWebError('error'); } }}
+            style={{ flex: 1, opacity: loading ? 0 : 1 }}
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState={false}
+            keyboardDisplayRequiresUserAction={false}
+            allowsInlineMediaPlayback
+            scrollEnabled
+            automaticallyAdjustContentInsets={false}
+            contentInsetAdjustmentBehavior="never"
+          />
+          {loading && (
+            <View style={s.loader}>
+              <ActivityIndicator size="large" color={C.primary} />
+              <Text style={s.loaderTxt}>Ładowanie...</Text>
+            </View>
+          )}
+        </View>
       )}
     </SafeAreaView>
   );
@@ -105,7 +116,7 @@ const s = StyleSheet.create({
   closeTxt: { color: C.text3, fontSize: 14, fontWeight: '700' },
   title: { fontSize: 15, fontWeight: '800', color: C.text1 },
   loader: {
-    position: 'absolute', top: 60, left: 0, right: 0, bottom: 0,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: C.bg, zIndex: 10,
   },

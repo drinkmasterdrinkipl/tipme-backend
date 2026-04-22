@@ -247,10 +247,43 @@ body {
   transform: translateY(-50%);
   z-index: 2;
 }
-@media (max-width: 900px) { .phone-wrap { display: none; } }
+@media (max-width: 900px) {
+  .hero {
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 60px;
+    text-align: center;
+  }
+  .hero .container {
+    max-width: 100%;
+  }
+  .hero-ctas {
+    justify-content: center;
+  }
+  .hero-stats {
+    justify-content: center;
+  }
+  .hero-subtitle {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .phone-wrap {
+    position: relative;
+    right: auto;
+    top: auto;
+    transform: none;
+    display: flex;
+    justify-content: center;
+    margin-top: 48px;
+  }
+  .phone {
+    width: 220px;
+    height: 460px;
+  }
+}
 .phone {
   width: 260px;
-  height: 520px;
+  height: 560px;
   border-radius: 48px;
   background: linear-gradient(145deg, #1a1430, #0d0920);
   border: 1.5px solid var(--border-a);
@@ -279,13 +312,194 @@ body {
   border-radius: 36px;
   overflow: hidden;
   background: var(--bg);
+  position: relative;
 }
-.phone-ui { padding: 40px 16px 16px; }
+
+/* ── Phone slides animation ── */
+.phone-slide {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+}
+.phone-slide-home {
+  animation: showHome 10s ease-in-out infinite;
+}
+.phone-slide-tap {
+  animation: showTap 10s ease-in-out infinite;
+}
+@keyframes showHome {
+  0%, 40%  { opacity: 1; }
+  48%, 92% { opacity: 0; }
+  100%     { opacity: 1; }
+}
+@keyframes showTap {
+  0%, 40%  { opacity: 0; }
+  48%, 92% { opacity: 1; }
+  100%     { opacity: 0; }
+}
+
+.phone-ui { padding: 40px 14px 14px; }
+
+/* ── Tap screen (iOS Tap to Pay style) ── */
+.pui-tap-ui {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #08080f;
+  border-radius: 36px;
+  overflow: hidden;
+}
+
+/* Niebieski obszar NFC z cząsteczkami */
+.pui-nfc-area {
+  height: 44%;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 22px 0 0;
+  background:
+    radial-gradient(ellipse 130% 100% at 50% -5%, rgba(109,40,217,0.95) 0%, rgba(76,29,149,0.7) 50%, transparent 78%),
+    radial-gradient(ellipse 80% 60% at 20% 90%, rgba(147,51,234,0.3) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 60% at 80% 90%, rgba(192,132,252,0.2) 0%, transparent 60%),
+    #08080f;
+}
+
+/* Cząsteczki — dwie warstwy migające naprzemiennie */
+.pui-particles::before,
+.pui-particles::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 1px; height: 1px;
+  border-radius: 50%;
+  background: transparent;
+}
+.pui-particles::before {
+  box-shadow:
+    8px 6px 0 1px rgba(192,132,252,0.9), 25px 3px 0 1px rgba(147,51,234,0.6),
+    45px 14px 0 1px rgba(216,180,254,0.8), 63px 5px 0 1px rgba(192,132,252,0.5),
+    80px 20px 0 1px rgba(147,51,234,0.9), 98px 8px 0 1px rgba(216,180,254,0.6),
+    115px 16px 0 1px rgba(192,132,252,0.7), 132px 3px 0 1px rgba(147,51,234,0.5),
+    150px 22px 0 1px rgba(216,180,254,0.8), 168px 10px 0 1px rgba(192,132,252,0.6),
+    185px 18px 0 1px rgba(147,51,234,0.7), 203px 5px 0 1px rgba(216,180,254,0.5),
+    220px 14px 0 1px rgba(192,132,252,0.8),
+    12px 38px 0 1px rgba(147,51,234,0.4), 32px 52px 0 1px rgba(216,180,254,0.5),
+    55px 42px 0 1px rgba(192,132,252,0.4), 75px 58px 0 1px rgba(147,51,234,0.3),
+    95px 46px 0 1px rgba(216,180,254,0.5), 115px 62px 0 1px rgba(192,132,252,0.3),
+    138px 50px 0 1px rgba(147,51,234,0.4), 158px 64px 0 1px rgba(216,180,254,0.3),
+    178px 48px 0 1px rgba(192,132,252,0.4), 198px 60px 0 1px rgba(147,51,234,0.3),
+    5px 78px 0 1px rgba(216,180,254,0.3), 28px 88px 0 1px rgba(192,132,252,0.2),
+    50px 74px 0 1px rgba(147,51,234,0.3), 72px 92px 0 1px rgba(216,180,254,0.2),
+    95px 80px 0 1px rgba(192,132,252,0.3), 118px 96px 0 1px rgba(147,51,234,0.2),
+    140px 82px 0 1px rgba(216,180,254,0.3), 162px 98px 0 1px rgba(192,132,252,0.2),
+    185px 76px 0 1px rgba(147,51,234,0.3), 208px 90px 0 1px rgba(216,180,254,0.2);
+  animation: twinkleA 2.8s ease-in-out infinite;
+}
+.pui-particles::after {
+  box-shadow:
+    18px 12px 0 1px rgba(147,51,234,0.7), 38px 22px 0 1px rgba(216,180,254,0.5),
+    58px 8px 0 1px rgba(192,132,252,0.8), 78px 28px 0 1px rgba(147,51,234,0.6),
+    100px 12px 0 1px rgba(216,180,254,0.7), 120px 24px 0 1px rgba(192,132,252,0.5),
+    142px 10px 0 1px rgba(147,51,234,0.8), 162px 26px 0 1px rgba(216,180,254,0.6),
+    182px 12px 0 1px rgba(192,132,252,0.7), 210px 24px 0 1px rgba(147,51,234,0.5),
+    22px 44px 0 1px rgba(216,180,254,0.4), 44px 34px 0 1px rgba(192,132,252,0.5),
+    66px 48px 0 1px rgba(147,51,234,0.3), 88px 36px 0 1px rgba(216,180,254,0.4),
+    108px 52px 0 1px rgba(192,132,252,0.3), 128px 40px 0 1px rgba(147,51,234,0.4),
+    148px 54px 0 1px rgba(216,180,254,0.3), 170px 38px 0 1px rgba(192,132,252,0.4),
+    192px 50px 0 1px rgba(147,51,234,0.3), 215px 36px 0 1px rgba(216,180,254,0.4),
+    15px 68px 0 1px rgba(192,132,252,0.2), 38px 80px 0 1px rgba(147,51,234,0.3),
+    60px 70px 0 1px rgba(216,180,254,0.2), 84px 86px 0 1px rgba(192,132,252,0.2),
+    108px 72px 0 1px rgba(147,51,234,0.3), 132px 88px 0 1px rgba(216,180,254,0.2),
+    155px 72px 0 1px rgba(192,132,252,0.3), 178px 84px 0 1px rgba(147,51,234,0.2),
+    200px 70px 0 1px rgba(216,180,254,0.3);
+  animation: twinkleA 2.8s ease-in-out infinite;
+  animation-delay: 1.4s;
+}
+@keyframes twinkleA {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+/* NFC ikona z pliku PNG */
+.pui-nfc-img {
+  width: 90px;
+  height: auto;
+  position: relative;
+  z-index: 2;
+  filter: invert(1) brightness(1.1);
+  mix-blend-mode: screen;
+  opacity: 0.95;
+}
+
+/* Tekst pod ikoną NFC */
+.pui-tap-text {
+  position: relative;
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  text-align: center;
+  letter-spacing: 0.1px;
+  padding: 0 14px;
+  width: 100%;
+  margin-top: -4px;
+}
+.pui-pay-card {
+  margin: 14px 10px 0;
+  background: #1c1c2e;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 36px 10px 38px;
+}
+.pui-pay-appicon {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  box-shadow: 0 0 12px rgba(147,51,234,0.5);
+  margin-bottom: 2px;
+}
+.pui-pay-appname {
+  font-size: 8px;
+  color: rgba(255,255,255,0.4);
+  font-weight: 600;
+}
+.pui-pay-amount {
+  font-size: 28px;
+  font-weight: 900;
+  color: white;
+  letter-spacing: -1px;
+  line-height: 1.1;
+}
+.pui-cancel-btn {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  margin: 26px auto 0;
+  cursor: pointer;
+}
 .pui-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 .pui-brand { font-size: 13px; font-weight: 800; color: var(--text1); }
 .pui-live {
@@ -306,39 +520,79 @@ body {
   background: var(--success);
   animation: pulse 2s infinite;
 }
-.pui-hero { text-align: center; margin-bottom: 20px; }
-.pui-label { font-size: 8px; font-weight: 700; letter-spacing: 2px; color: var(--text3); margin-bottom: 4px; }
-.pui-amount { font-size: 40px; font-weight: 900; color: var(--text1); letter-spacing: -2px; }
-.pui-curr { font-size: 18px; font-weight: 700; color: var(--text2); }
+.pui-section-label {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text3);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
 .pui-presets {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: 5px;
+  margin-bottom: 10px;
 }
 .pui-preset {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
   text-align: center;
-  padding: 8px 0;
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--text3);
+  padding: 10px 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.pui-pval {
+  font-size: 18px;
+  font-weight: 900;
+  color: #A78BFA;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+.pui-pzl {
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.28);
+  line-height: 1;
 }
 .pui-preset-active {
   background: var(--primary-f);
   border-color: var(--border-a);
-  color: var(--text1);
+}
+.pui-preset-active .pui-pval { color: var(--text1); }
+.pui-preset-active .pui-pzl { color: var(--primary-l); }
+.pui-input-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 14px;
+  margin-bottom: 10px;
+}
+.pui-input-placeholder {
+  font-size: 18px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.12);
+}
+.pui-input-curr {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
 }
 .pui-cta {
   background: var(--primary);
   border-radius: 12px;
   text-align: center;
-  padding: 12px;
+  padding: 13px;
   font-size: 12px;
   font-weight: 800;
   color: var(--white);
+  box-shadow: 0 6px 20px rgba(147,51,234,0.35);
 }
 
 /* ── SECTIONS ──────────────────────────────── */
@@ -450,27 +704,33 @@ body {
 
 /* ── PROFESSIONS ───────────────────────────── */
 .professions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-top: 48px;
 }
+@media (max-width: 768px) {
+  .professions { grid-template-columns: repeat(2, 1fr); }
+}
 .profession {
   display: flex;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  padding: 14px 20px;
-  border-radius: 16px;
+  padding: 28px 16px;
+  border-radius: 20px;
   background: var(--card);
   border: 1px solid var(--border);
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text2);
-  transition: border-color 0.2s, color 0.2s;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
   cursor: default;
+  text-align: center;
 }
-.profession:hover { border-color: var(--border-a); color: var(--text1); }
-.profession-icon { font-size: 22px; }
+.profession:hover { border-color: var(--border-a); color: var(--text1); background: rgba(147,51,234,0.05); }
+.profession-icon { font-size: 28px; }
 
 /* ── PRICING ───────────────────────────────── */
 .pricing {
