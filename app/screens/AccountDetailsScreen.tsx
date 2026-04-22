@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
@@ -129,7 +130,10 @@ export default function AccountDetailsScreen() {
 </html>`;
 
       const { uri } = await Print.printToFileAsync({ html, base64: false });
-      await Sharing.shareAsync(uri, {
+      const filename = `Zestawienie-wyplat-${year}-TipForMe.pdf`;
+      const dest = FileSystem.documentDirectory + filename;
+      await FileSystem.moveAsync({ from: uri, to: dest });
+      await Sharing.shareAsync(dest, {
         mimeType: 'application/pdf',
         dialogTitle: `Zestawienie wypłat ${year} — Tip For Me`,
         UTI: 'com.adobe.pdf',

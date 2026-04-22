@@ -21,7 +21,11 @@ function toPlDate(d: Date) {
   return `${pl.getUTCFullYear()}-${String(pl.getUTCMonth()+1).padStart(2,'0')}-${String(pl.getUTCDate()).padStart(2,'0')}`;
 }
 function todayStr() { return toPlDate(new Date()); }
-function yesterdayStr() { return toPlDate(new Date(Date.now() - 86400000)); }
+function yesterdayStr() {
+  const now = new Date();
+  const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  return toPlDate(y);
+}
 function dateLabel(dateStr: string): string {
   const t = todayStr();
   const y = yesterdayStr();
