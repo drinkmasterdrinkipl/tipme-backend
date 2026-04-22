@@ -1196,6 +1196,34 @@ app.use((err, req, res, next) => {
 
 
 // ============================================
+// USUNIĘCIE KONTA — wymaganie Apple 5.1.1 + RODO
+// ============================================
+app.delete('/api/delete-account', authenticateToken, async (req, res) => {
+  try {
+    const accountId = req.user.accountId;
+    if (!accountId) return res.status(400).json({ error: 'Brak ID konta' });
+
+    // Sprawdź saldo — Stripe nie pozwala usunąć konta z dodatnim saldem
+    const balance = await stripe.balance.retrieve({}, { stripeAccount: accountId });
+    const available = balance.available.reduce((sum, b) => sum + b.amount, 0);
+    const pending = balance.pending.reduce((sum, b) => sum + b.amount, 0);
+    if (available > 0 || pending > 0) {
+      return res.status(400).json({
+        error: 'Nie można usunąć konta z niezerowym saldem. Wypłać środki przed usunięciem konta.',
+        balance: { available: available / 100, pending: pending / 100 },
+      });
+    }
+
+    // Usuń konto Stripe Connect — usuwa wszystkie dane użytkownika
+    await stripe.accounts.del(accountId);
+    res.json({ deleted: true });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+// ============================================
 // START SERWERA
 // ============================================
 const PORT = process.env.PORT || 3000;
