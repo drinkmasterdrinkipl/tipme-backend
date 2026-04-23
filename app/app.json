@@ -40,15 +40,7 @@
         "locationWhenInUsePermission": "Tip For Me potrzebuje lokalizacji do przetwarzania płatności Tap to Pay.",
         "bluetoothPeripheralPermission": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart.",
         "bluetoothAlwaysUsagePermission": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart."
-      }],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/icon.png",
-          "color": "#9333ea",
-          "sounds": []
-        }
-      ]
+      }]
     ],
     "extra": {
       "eas": {
