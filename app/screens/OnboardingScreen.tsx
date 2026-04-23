@@ -495,7 +495,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
 
           <Text style={styles.infoText}>
             Stripe to bezpieczna platforma płatności.{'\n'}
-            Twoje dane są chronione przez Stripe (licencja EMI UE).
+            Twoje dane są chronione przez Stripe (licencja Instytucji Pieniądza Elektronicznego UE).
           </Text>
 
           <TouchableOpacity

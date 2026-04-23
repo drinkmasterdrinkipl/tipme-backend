@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.drinki.tipme",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "minimumOsVersion": "18.0",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Tip For Me potrzebuje lokalizacji do przetwarzania płatności Tap to Pay.",
