@@ -21,10 +21,7 @@
       "buildNumber": "4",
       "minimumOsVersion": "18.0",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Tip For Me potrzebuje lokalizacji do przetwarzania płatności Tap to Pay.",
         "NFCReaderUsageDescription": "Tip For Me używa NFC do przyjmowania płatności zbliżeniowych.",
-        "NSBluetoothAlwaysUsageDescription": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart.",
-        "NSBluetoothPeripheralUsageDescription": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart.",
         "UIBackgroundModes": [
           "bluetooth-central",
           "bluetooth-peripheral"
@@ -38,7 +35,12 @@
     "plugins": [
       "expo-asset",
       "expo-font",
-      "@stripe/stripe-terminal-react-native",
+      ["@stripe/stripe-terminal-react-native", {
+        "bluetoothBackgroundMode": true,
+        "locationWhenInUsePermission": "Tip For Me potrzebuje lokalizacji do przetwarzania płatności Tap to Pay.",
+        "bluetoothPeripheralPermission": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart.",
+        "bluetoothAlwaysUsagePermission": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart."
+      }],
       [
         "expo-notifications",
         {
