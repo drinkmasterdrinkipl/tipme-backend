@@ -45,16 +45,7 @@ export default function HomeScreen({ navigation }: any) {
       await initialize().catch(() => {});
       await disconnectReader().catch(() => {});
       const { error } = await discoverReaders({ discoveryMethod: 'tapToPay', simulated: false });
-      if (error) {
-        // SDK zawiedzie = T&C mogą wymagać ponownej akceptacji — wyłącz tylko jeśli było włączone
-        const wasEnabled = await AsyncStorage.getItem('tapToPayEnabled').catch(() => null);
-        if (wasEnabled === 'true') {
-          await AsyncStorage.removeItem('tapToPayEnabled').catch(() => {});
-          setTapToPayEnabled(false);
-        }
-        return;
-      }
-      // SDK działa — nie nadpisuj wyboru usera (wyłączone zostaje wyłączone)
+      if (error) return; // silent — payment flow shows actionable error to user
       warmupDoneRef.current = true;
     } catch { /* cicho — warmup nieblokujący */ }
   }, [discoverReaders, disconnectReader]);

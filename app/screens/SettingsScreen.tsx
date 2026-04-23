@@ -8,16 +8,13 @@ import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Switch, Alert, ActivityIndicator, Platform,
+  ScrollView, Switch, Alert, ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import { C } from '../theme';
 import { useAppContext } from '../AppContext';
 import { API_URL, apiFetch } from '../config';
-import { isProximityReaderDiscoveryAvailable, presentProximityReaderEducation } from '../hooks/useProximityReaderDiscovery';
-
-const isIOS18Plus = Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 18;
 
 export default function SettingsScreen({ navigation }: any) {
   const { onLogout } = useAppContext();
@@ -63,8 +60,8 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
-  const handleShowTutorial = async () => {
-    await presentProximityReaderEducation().catch(() => {});
+  const handleShowTutorial = () => {
+    navigation.navigate('TapToPayEducation');
   };
 
   const handleDeleteAccount = () => {

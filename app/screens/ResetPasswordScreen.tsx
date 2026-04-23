@@ -59,7 +59,10 @@ export default function ResetPasswordScreen({ route, navigation }: any) {
           </Text>
           <TouchableOpacity
             style={s.primaryBtn}
-            onPress={onLogout}
+            onPress={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              onLogout();
+            }}
           >
             <Text style={s.primaryBtnText}>Przejdź do logowania →</Text>
           </TouchableOpacity>

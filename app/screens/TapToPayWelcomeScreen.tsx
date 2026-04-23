@@ -8,36 +8,22 @@ import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, Linking, Platform,
+  ScrollView, ActivityIndicator, Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
-import { isProximityReaderDiscoveryAvailable, presentProximityReaderEducation } from '../hooks/useProximityReaderDiscovery';
-
-const isIOS18Plus = Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 18;
 
 export default function TapToPayWelcomeScreen({ navigation }: any) {
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Wymaganie Apple 4.1: ProximityReaderDiscovery na iOS 18+ (obsługiwane automatycznie
-  // przez natywne Stripe Terminal SDK 5.1.1 gdy wywołamy discoverReaders)
-  const { discoverReaders, disconnectReader } = useStripeTerminal();
-
   const handleEnable = async () => {
     setLoading(true);
     try {
       await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
-
-      // iOS 18+: systemowy ekran edukacyjny Apple (ProximityReaderDiscovery)
-      await presentProximityReaderEducation().catch(() => {});
       await AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
       await AsyncStorage.setItem('tapToPayEducationShown', 'true').catch(() => {});
-      const locationId = await AsyncStorage.getItem('stripeLocationId');
-      if (locationId) {
-        await disconnectReader().catch(() => {});
-        discoverReaders({ discoveryMethod: 'tapToPay', simulated: false }).catch(() => {});
-      }
+      // Apple TTP acceptance sheet is triggered automatically by discoverReaders('tapToPay')
+      // in HomeScreen's warmupReader after navigation — no concurrent discovery needed here.
       navigation.goBack();
     } finally {
       setLoading(false);
