@@ -16,8 +16,7 @@ import { isProximityReaderDiscoveryAvailable, presentProximityReaderEducation } 
 
 const isIOS18Plus = Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 18;
 
-export default function TapToPayWelcomeScreen({ navigation, route }: any) {
-  const { onComplete } = route.params ?? {};
+export default function TapToPayWelcomeScreen({ navigation }: any) {
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -32,14 +31,13 @@ export default function TapToPayWelcomeScreen({ navigation, route }: any) {
 
       // iOS 18+: systemowy ekran edukacyjny Apple (ProximityReaderDiscovery)
       await presentProximityReaderEducation().catch(() => {});
-      AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
-      AsyncStorage.setItem('tapToPayEducationShown', 'true').catch(() => {});
+      await AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
+      await AsyncStorage.setItem('tapToPayEducationShown', 'true').catch(() => {});
       const locationId = await AsyncStorage.getItem('stripeLocationId');
       if (locationId) {
         await disconnectReader().catch(() => {});
         discoverReaders({ discoveryMethod: 'tapToPay', simulated: false }).catch(() => {});
       }
-      if (typeof onComplete === 'function') { try { onComplete(); } catch {} }
       navigation.goBack();
     } finally {
       setLoading(false);

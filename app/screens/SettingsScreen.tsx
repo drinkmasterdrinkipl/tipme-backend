@@ -43,11 +43,7 @@ export default function SettingsScreen({ navigation }: any) {
 
   const toggleTapToPay = async (value: boolean) => {
     if (value) {
-      navigation.navigate('TapToPayWelcome', {
-        onComplete: () => {
-          setTapToPayEnabled(true);
-        },
-      });
+      navigation.navigate('TapToPayWelcome', {});
     } else {
       Alert.alert(
         'Wyłącz Tap to Pay',
@@ -101,7 +97,7 @@ export default function SettingsScreen({ navigation }: any) {
                       await AsyncStorage.multiRemove([
                         'stripeAccountId', 'userEmail', 'stripeLocationId',
                         'tapToPayEnabled', 'tapToPayWelcomeShown', 'tapToPayEducationShown',
-                        'authToken',
+                        'authToken', 'ttpLaunchNotificationSent',
                       ]).catch(() => {});
                       onLogout();
                     } catch {
@@ -120,7 +116,7 @@ export default function SettingsScreen({ navigation }: any) {
   const handleLogout = () => {
     Alert.alert(
       'Czy na pewno chcesz się wylogować?',
-      null,
+      'Będziesz musiał zalogować się ponownie.',
       [
         { text: 'Anuluj', style: 'cancel' },
         {
@@ -131,7 +127,7 @@ export default function SettingsScreen({ navigation }: any) {
             await AsyncStorage.multiRemove([
               'stripeAccountId', 'userEmail', 'stripeLocationId',
               'tapToPayEnabled', 'tapToPayWelcomeShown', 'tapToPayEducationShown',
-              'authToken',
+              'authToken', 'ttpLaunchNotificationSent',
             ]).catch(() => {});
             onLogout();
           },

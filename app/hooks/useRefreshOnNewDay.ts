@@ -22,7 +22,7 @@ export function useRefreshOnNewDay(onNewDay: () => void) {
         const current = todayStr();
         if (current !== lastDateRef.current) {
           lastDateRef.current = current;
-          callbackRef.current();
+          try { callbackRef.current(); } catch {}
         }
       }
     };

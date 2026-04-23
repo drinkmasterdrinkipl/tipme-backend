@@ -4,7 +4,7 @@
 // Edukacja merchanta — jak używać Tap to Pay
 // ============================================
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
@@ -57,12 +57,16 @@ const SLIDES = [
   },
 ];
 
-export default function TapToPayEducationScreen({ navigation, route }: any) {
-  const { onComplete } = route.params ?? {};
+export default function TapToPayEducationScreen({ navigation }: any) {
   const { width } = useWindowDimensions();
   const [currentSlide, setCurrentSlide] = useState(0);
   const finishingRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
+  const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (finishTimerRef.current) clearTimeout(finishTimerRef.current);
+  }, []);
 
   const goToSlide = (index: number) => {
     scrollRef.current?.scrollTo({ x: index * width, animated: true });
@@ -82,12 +86,9 @@ export default function TapToPayEducationScreen({ navigation, route }: any) {
     finishingRef.current = true;
     AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
     AsyncStorage.setItem('tapToPayEducationShown', 'true').catch(() => {});
-    if (typeof onComplete === 'function') {
-      try { onComplete(); } catch { }
-    }
     navigation.goBack();
     // Wymaganie Apple 3.9: po edukacji zaproś do pierwszej płatności
-    setTimeout(() => {
+    finishTimerRef.current = setTimeout(() => {
       Alert.alert(
         'Tap to Pay gotowe! 🎉',
         'Jesteś gotowy do przyjmowania napiwków zbliżeniowo. Chcesz zrobić pierwszą płatność teraz?',

@@ -154,7 +154,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       if (token) await AsyncStorage.setItem('authToken', token);
 
       if (data.chargesEnabled) {
-        ensureLocationId(data.accountId).catch(() => {});
+        await ensureLocationId(data.accountId);
         if (onComplete) onComplete();
         else navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
       } else if (!data.detailsSubmitted && data.onboardingUrl) {

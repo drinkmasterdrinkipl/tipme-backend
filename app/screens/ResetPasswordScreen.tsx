@@ -5,8 +5,10 @@ import {
   StyleSheet, ActivityIndicator, Alert, ScrollView, Keyboard,
 } from 'react-native';
 import { API_URL, apiFetch } from '../config';
+import { useAppContext } from '../AppContext';
 
 export default function ResetPasswordScreen({ route, navigation }: any) {
+  const { onLogout } = useAppContext();
   const token: string = route?.params?.token ?? '';
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -34,7 +36,7 @@ export default function ResetPasswordScreen({ route, navigation }: any) {
           'Link nieważny',
           'Ten link wygasł lub został już użyty. Wróć do logowania i wybierz "Zapomniałem hasła" aby otrzymać nowy.',
           [
-            { text: 'Wróć do logowania', onPress: () => navigation.navigate('Onboarding') },
+            { text: 'Wróć do logowania', onPress: onLogout },
           ]
         );
       } else {
@@ -57,7 +59,7 @@ export default function ResetPasswordScreen({ route, navigation }: any) {
           </Text>
           <TouchableOpacity
             style={s.primaryBtn}
-            onPress={() => navigation.navigate('Onboarding')}
+            onPress={onLogout}
           >
             <Text style={s.primaryBtnText}>Przejdź do logowania →</Text>
           </TouchableOpacity>

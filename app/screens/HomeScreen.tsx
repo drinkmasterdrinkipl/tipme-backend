@@ -21,6 +21,7 @@ export default function HomeScreen({ navigation }: any) {
   const [navigating, setNavigating] = useState(false);
   const warmupDoneRef = useRef(false);
   const discoveredRef = useRef<any[]>([]);
+  const navigatingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { initialize, discoverReaders, disconnectReader } = useStripeTerminal({
     // Wymaganie Apple 1.6: SDK potwierdza dostępność czytnika — ale NIE nadpisuje
@@ -87,12 +88,13 @@ export default function HomeScreen({ navigation }: any) {
     Keyboard.dismiss();
     if (!tapToPayEnabled) {
       // Wymaganie Apple 5.3: przycisk checkout automatycznie otwiera T&C Tap to Pay
-      navigation.navigate('TapToPayWelcome', { onComplete: () => setTapToPayEnabled(true) });
+      navigation.navigate('TapToPayWelcome', {});
       return;
     }
     setNavigating(true);
     navigation.navigate('Tap', { amount: Math.round(finalAmount * 100) });
-    setTimeout(() => setNavigating(false), 1000);
+    if (navigatingTimerRef.current) clearTimeout(navigatingTimerRef.current);
+    navigatingTimerRef.current = setTimeout(() => setNavigating(false), 1000);
   };
 
   return (
@@ -203,7 +205,7 @@ export default function HomeScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
-  scroll: { flexGrow: 1, paddingBottom: 8, paddingTop: 8 },
+  scroll: { flexGrow: 1, paddingBottom: 8, paddingTop: 8, justifyContent: 'center' },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8,

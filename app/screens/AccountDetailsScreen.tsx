@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 
@@ -49,7 +49,7 @@ export default function AccountDetailsScreen() {
 
       const rows = payouts.map(p => {
         const date = new Date((p.arrivalDate ?? p.arrival_date) * 1000).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const statusLabel = p.status === 'paid' ? '✓ Wysłano' : p.status === 'failed' ? '✗ Błąd' : '⏳ W toku';
+        const statusLabel = p.status === 'paid' ? '✓ Wypłacono' : p.status === 'failed' ? '✗ Błąd' : '⏳ W toku';
         const statusColor = p.status === 'paid' ? '#16a34a' : p.status === 'failed' ? '#dc2626' : '#d97706';
         const amount = (p.amount ?? 0).toFixed(2);
         return `
@@ -139,7 +139,7 @@ export default function AccountDetailsScreen() {
         UTI: 'com.adobe.pdf',
       });
     } catch (e: any) {
-      Alert.alert('Błąd', 'Nie udało się wygenerować zestawienia. Spróbuj ponownie.');
+      Alert.alert('Błąd', e?.message || 'Nie udało się wygenerować zestawienia.');
     } finally {
       if (mountedRef.current) setExporting(false);
     }

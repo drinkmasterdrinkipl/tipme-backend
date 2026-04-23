@@ -145,6 +145,7 @@ export default function App() {
 
   const navigationRef = useRef<any>(null);
   const welcomeNavigatedRef = useRef(false);
+  const pendingResetTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -169,34 +170,54 @@ export default function App() {
 
   const navigateToWelcome = useCallback(() => {
     if (!isOnboarded || !showWelcome || welcomeNavigatedRef.current) return;
+    if (pendingResetTokenRef.current) return;  // reset link ma priorytet
     if (!navigationRef.current?.isReady()) return;
     welcomeNavigatedRef.current = true;
-    navigationRef.current.navigate('TapToPayWelcome' as never, {
-      onComplete: () => {
-        setShowWelcome(false);
-        welcomeNavigatedRef.current = false;
-      },
-    } as never);
+    navigationRef.current.navigate('TapToPayWelcome' as never, {} as never);
   }, [isOnboarded, showWelcome]);
 
-  // Odpala się gdy stan się zmienia (np. po handleOnboardingComplete)
-  useEffect(() => { navigateToWelcome(); }, [navigateToWelcome]);
+  // Opóźnienie 200ms daje czas Linking.getInitialURL na rozwiązanie przed welcome screen
+  useEffect(() => {
+    const timer = setTimeout(navigateToWelcome, 200);
+    return () => clearTimeout(timer);
+  }, [navigateToWelcome]);
+
+  // Gdy isOnboarded się ustali i nawigacja jest gotowa — obsłuż oczekujący deep link
+  useEffect(() => {
+    if (isOnboarded === null) return;
+    const token = pendingResetTokenRef.current;
+    if (!token) return;
+    pendingResetTokenRef.current = null;
+    // Pomiń TapToPayWelcome — reset hasła ma priorytet
+    setShowWelcome(false);
+    welcomeNavigatedRef.current = true;
+    const timer = setTimeout(() => {
+      navigationRef.current?.navigate('ResetPassword' as never, { token } as never);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [isOnboarded]);
 
   // Deep link handling — tipforme://reset-password?token=xxx
+  const navigateToReset = useCallback((token: string) => {
+    // Natychmiastowe zablokowanie TapToPayWelcome — reset hasła ma priorytet
+    setShowWelcome(false);
+    welcomeNavigatedRef.current = true;
+    if (navigationRef.current?.isReady()) {
+      navigationRef.current.navigate('ResetPassword' as never, { token } as never);
+    } else {
+      pendingResetTokenRef.current = token;
+    }
+  }, []);
+
   const handleDeepLink = useCallback((url: string | null) => {
     if (!url) return;
     try {
-      // Parsuj URL ręcznie (React Native nie ma globalnego URL w starszych wersjach)
       const tokenMatch = url.match(/[?&]token=([^&]+)/);
       if (url.includes('reset-password') && tokenMatch) {
-        const token = decodeURIComponent(tokenMatch[1]);
-        // Krótki timeout żeby nawigator zdążył się zamontować
-        setTimeout(() => {
-          navigationRef.current?.navigate('ResetPassword' as never, { token } as never);
-        }, 200);
+        navigateToReset(decodeURIComponent(tokenMatch[1]));
       }
     } catch {}
-  }, []);
+  }, [navigateToReset]);
 
   useEffect(() => {
     // Aplikacja otwarta przez link (zimny start)
@@ -210,10 +231,6 @@ export default function App() {
     setIsOnboarded(false);
     setShowWelcome(false);
     welcomeNavigatedRef.current = false;
-    // Reset backstack — user nie może trafić na stare ekrany po wylogowaniu
-    setTimeout(() => {
-      navigationRef.current?.reset({ index: 0, routes: [{ name: 'Onboarding' as never }] });
-    }, 0);
   }, []);
 
   const contextValue = useMemo(() => ({ onLogout: handleLogout }), [handleLogout]);
