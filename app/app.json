@@ -40,7 +40,8 @@
         "locationWhenInUsePermission": "Tip For Me potrzebuje lokalizacji do przetwarzania płatności Tap to Pay.",
         "bluetoothPeripheralPermission": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart.",
         "bluetoothAlwaysUsagePermission": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart."
-      }]
+      }],
+      "./plugins/remove-aps-environment.js"
     ],
     "extra": {
       "eas": {
