@@ -127,6 +127,10 @@ app.use('/api/auth/reset-password', loginLimiter);
 const receiptLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, message: { error: 'Zbyt wiele potwierdzeń. Poczekaj godzinę.' } });
 app.use('/api/send-receipt', receiptLimiter);
 
+// Ostrzejszy limit na account-status — endpoint publiczny, ograniczamy skanowanie
+const accountStatusLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: { error: 'Za dużo zapytań. Poczekaj chwilę.' } });
+app.use('/api/account-status', accountStatusLimiter);
+
 // Webhook musi mieć raw body PRZED express.json()
 app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -771,6 +775,9 @@ app.post('/api/create-payment-intent', authenticateToken, async (req, res) => {
 
     // Idempotency key zapobiega podwójnym płatnościom przy ponowieniu requestu
     const idempotencyKey = req.headers['idempotency-key'];
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'Brak idempotency-key' });
+    }
 
     const paymentIntent = await stripe.paymentIntents.create(
       {
@@ -784,7 +791,7 @@ app.post('/api/create-payment-intent', authenticateToken, async (req, res) => {
       },
       {
         stripeAccount: stripeAccountId,
-        ...(idempotencyKey && { idempotencyKey }),
+        idempotencyKey,
       }
     );
 

@@ -10,10 +10,14 @@ import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 const MONTHS = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
 const DAYS   = ['Pn','Wt','Śr','Cz','Pt','Sb','Nd'];
 
-function toDateStr(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function toPlDate(d: Date) {
+  const jan = new Date(d.getFullYear(), 0, 1).getTimezoneOffset();
+  const jul = new Date(d.getFullYear(), 6, 1).getTimezoneOffset();
+  const isDST = d.getTimezoneOffset() < Math.max(jan, jul);
+  const pl = new Date(d.getTime() + (isDST ? 2 : 1) * 3600000);
+  return `${pl.getUTCFullYear()}-${String(pl.getUTCMonth()+1).padStart(2,'0')}-${String(pl.getUTCDate()).padStart(2,'0')}`;
 }
-function todayStr() { return toDateStr(new Date()); }
+function todayStr() { return toPlDate(new Date()); }
 
 // ─── Calendar ────────────────────────────────────────────
 function Calendar({ selected, onSelect }: { selected: string; onSelect: (d: string) => void }) {

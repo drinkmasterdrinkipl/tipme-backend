@@ -196,8 +196,10 @@ export default function TapScreen({ navigation, route }: any) {
         }
         paymentIntentIdRef.current = null;
       }
-      setStatus('error');
-      setErrorMsg(translateError(error.message || ''));
+      if (mountedRef.current) {
+        setStatus('error');
+        setErrorMsg(translateError(error.message || ''));
+      }
     }
   }, [amount, amountZl, navigation, collectPaymentMethod, confirmPaymentIntent, retrievePaymentIntent, translateError]);
 
@@ -241,7 +243,7 @@ export default function TapScreen({ navigation, route }: any) {
         const version = typeof Platform.Version === 'string'
           ? parseFloat(Platform.Version)
           : Platform.Version;
-        const [major, minor] = String(version).split('.').map(Number);
+        const [major, minor] = String(version).split('.').map(n => { const v = Number(n); return isNaN(v) ? 0 : v; });
         if (major < 17 || (major === 17 && (minor ?? 0) < 6)) {
           throw new Error('osVersionNotSupported');
         }
