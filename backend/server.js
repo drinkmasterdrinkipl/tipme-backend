@@ -187,6 +187,18 @@ const DAILY_PAYMENT_LIMIT = 50;          // max 50 prób dziennie na konto
 const paymentLastTime = new Map();  // accountId -> timestamp ostatniej próby
 const paymentDailyCount = new Map(); // accountId -> { count, date }
 
+// Cleanup co 24h — zapobiega memory leak przy długim działaniu serwera
+setInterval(() => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  for (const [key, val] of paymentDailyCount.entries()) {
+    if (val.date !== todayStr) paymentDailyCount.delete(key);
+  }
+  const cutoff = Date.now() - 60 * 60 * 1000; // usuń wpisy starsze niż 1h
+  for (const [key, val] of paymentLastTime.entries()) {
+    if (val < cutoff) paymentLastTime.delete(key);
+  }
+}, 24 * 60 * 60 * 1000);
+
 function checkPaymentRateLimit(accountId) {
   const now = Date.now();
   const todayStr = new Date().toISOString().slice(0, 10);

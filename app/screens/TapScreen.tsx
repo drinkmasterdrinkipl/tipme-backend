@@ -384,7 +384,7 @@ export default function TapScreen({ navigation, route }: any) {
         <View style={s.infoGrid}>
           {[
             'Brak dodatkowego\nsprzętu',
-            'Wypłata na konto\nw 2–3 dni',
+            'Wypłata na konto\nw 7 dni',
             'Szyfrowanie\nend-to-end',
             'Zgodność z\nnormą PCI DSS',
           ].map((txt) => (

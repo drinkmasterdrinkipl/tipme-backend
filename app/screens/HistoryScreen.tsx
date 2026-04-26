@@ -1,6 +1,6 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Alert, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
@@ -59,6 +59,7 @@ export default function HistoryScreen() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const mountedRef = useRef(true);
 
   const loadTransactions = useCallback(async () => {
@@ -88,6 +89,11 @@ export default function HistoryScreen() {
     return () => { mountedRef.current = false; };
   }, [loadTransactions]);
   useRefreshOnNewDay(useCallback(() => { loadTransactions(); }, [loadTransactions]));
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadTransactions();
+    setRefreshing(false);
+  }, [loadTransactions]);
 
   const totalPages = Math.max(1, Math.ceil(transactions.length / PAGE_SIZE));
   const pageTxs = useMemo(
@@ -175,7 +181,9 @@ export default function HistoryScreen() {
           <Text style={s.emptySub}>Pierwsza płatność pojawi się tutaj</Text>
         </View>
       ) : (
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={s.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primaryLight} />}
+        >
           {items.map((item, idx) => {
             if (item.type === 'header') {
               return (
@@ -213,7 +221,11 @@ export default function HistoryScreen() {
                     <>
                       <Text style={s.itemAmount}>+{Number.isInteger(tx.amount) ? tx.amount.toFixed(0) : tx.amount.toFixed(2)} zł</Text>
                       {canRefund && (
-                        <TouchableOpacity style={s.refundBtn} onPress={() => handleRefund(tx)}>
+                        <TouchableOpacity
+                          style={[s.refundBtn, refundingId !== null && { opacity: 0.4 }]}
+                          onPress={() => handleRefund(tx)}
+                          disabled={refundingId !== null}
+                        >
                           <Text style={s.refundBtnText}>Zwróć</Text>
                         </TouchableOpacity>
                       )}

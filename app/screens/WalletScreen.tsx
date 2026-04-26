@@ -31,19 +31,21 @@ export default function WalletScreen() {
         apiFetch(`${API_URL}/api/payouts/${accountId}`),
       ]);
       let balFailed = true;
-      if (balResult.status === 'fulfilled') {
-        if (balResult.value.ok) {
+      if (balResult.status === 'fulfilled' && balResult.value.ok) {
+        try {
           const balData = await balResult.value.json();
           if (!balData.error && mountedRef.current) {
             setAvailable(balData.available);
             setPending(balData.pending);
             balFailed = false;
           }
-        }
+        } catch { /* JSON parse error — balFailed stays true */ }
       }
       if (payoutsResult.status === 'fulfilled' && payoutsResult.value.ok && mountedRef.current) {
-        const payoutsData = await payoutsResult.value.json();
-        setPayouts(payoutsData.payouts || []);
+        try {
+          const payoutsData = await payoutsResult.value.json();
+          setPayouts(payoutsData.payouts || []);
+        } catch { /* JSON parse error — payouts stays empty */ }
       }
       if (balFailed && mountedRef.current) setLoadError('Nie udało się pobrać salda. Sprawdź połączenie.');
     } catch (e: any) {
@@ -111,18 +113,10 @@ export default function WalletScreen() {
               <View style={s.infoSep} />
               <Text style={s.infoRow}>
                 <Text style={s.infoBold}>2. Wypłata</Text>
-                {'  '}Rozliczone środki są automatycznie wysyłane na Twoje konto bankowe w ciągu 2–3 dni roboczych.
+                {'  '}Rozliczone środki są automatycznie wysyłane na Twoje konto bankowe w ciągu 7 dni roboczych. Z czasem okres ten się skraca.
               </Text>
             </View>
 
-            {/* Pierwsza wypłata — tylko dla nowych */}
-            {payouts.length === 0 && total > 0 && (
-              <View style={s.firstPayoutBox}>
-                <Text style={s.firstPayoutText}>
-                  ℹ️  Pierwsza wypłata może zająć do 7 dni roboczych — Stripe weryfikuje nowe konto.
-                </Text>
-              </View>
-            )}
 
             {/* Szczegóły konta */}
             <TouchableOpacity style={s.dashboardBtn} onPress={() => navigation.navigate('AccountDetails')} activeOpacity={0.75}>
