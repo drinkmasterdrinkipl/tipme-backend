@@ -8,7 +8,7 @@ import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
 
 const PAGE_SIZE = 20;
 
-interface Transaction { id: string; amount: number; paymentMethod: string; created: string; status: string; }
+interface Transaction { id: string; amount: number; paymentMethod: string; created: string; status: string; refunded: boolean; }
 type ListItem = { type: 'header'; label: string } | { type: 'tx' } & Transaction;
 
 function toPlDate(d: Date) {
@@ -59,7 +59,6 @@ export default function HistoryScreen() {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [refundingId, setRefundingId] = useState<string | null>(null);
-  const [refundedIds, setRefundedIds] = useState<Set<string>>(new Set());
   const mountedRef = useRef(true);
 
   const loadTransactions = useCallback(async () => {
@@ -126,7 +125,7 @@ export default function HistoryScreen() {
               const data = await res.json();
               if (!res.ok || data.error) throw new Error(data.error || 'Błąd serwera');
               if (mountedRef.current) {
-                setRefundedIds(prev => new Set([...prev, tx.id]));
+                setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, refunded: true } : t));
                 Alert.alert('Zwrot wysłany', `${tx.amount.toFixed(2)} zł zostanie zwrócone na kartę klienta w ciągu 5–10 dni roboczych.`);
               }
             } catch (e: any) {
@@ -186,9 +185,9 @@ export default function HistoryScreen() {
               );
             }
             const tx = item as Transaction & { type: 'tx' };
-            const isRefunded = refundedIds.has(tx.id);
+            const isRefunded = tx.refunded;
             const isRefunding = refundingId === tx.id;
-            const canRefund = Date.now() - new Date(tx.created).getTime() < 24 * 60 * 60 * 1000;
+            const canRefund = !isRefunded && Date.now() - new Date(tx.created).getTime() < 24 * 60 * 60 * 1000;
             return (
               <View key={tx.id} style={s.item}>
                 <View style={s.itemLeft}>

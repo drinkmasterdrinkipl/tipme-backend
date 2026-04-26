@@ -867,6 +867,7 @@ app.get('/api/transactions/:accountId', authenticateToken, requireOwnership, asy
       amount: charge.amount / 100, // grosze → złotówki
       currency: charge.currency,
       status: charge.status,
+      refunded: charge.refunded,
       created: new Date(charge.created * 1000).toISOString(),
       paymentMethod: charge.payment_method_details?.card_present
         ? `${charge.payment_method_details.card_present.brand} ••${charge.payment_method_details.card_present.last4}`
@@ -955,17 +956,17 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
       startingAfter = batch.data[batch.data.length - 1].id;
     }
 
-    const successful = allTxns.filter((t) =>
+    const relevant = allTxns.filter((t) =>
       (t.status === 'available' || t.status === 'pending') &&
-      (t.type === 'payment' || t.type === 'charge') &&
-      t.amount > 0
+      (t.type === 'payment' || t.type === 'charge' || t.type === 'refund')
     );
 
-    const totalAmount    = successful.reduce((sum, t) => sum + t.amount, 0) / 100;
-    const totalStripeFee = successful.reduce((sum, t) => sum + t.fee, 0) / 100;
-    const totalNet       = successful.reduce((sum, t) => sum + t.net, 0) / 100;
-    const count          = successful.length;
-    const average        = count > 0 ? totalAmount / count : 0;
+    const payments       = relevant.filter(t => t.amount > 0);
+    const totalAmount    = relevant.reduce((sum, t) => sum + t.amount, 0) / 100;
+    const totalStripeFee = relevant.reduce((sum, t) => sum + t.fee, 0) / 100;
+    const totalNet       = relevant.reduce((sum, t) => sum + t.net, 0) / 100;
+    const count          = payments.length;
+    const average        = count > 0 ? payments.reduce((sum, t) => sum + t.amount, 0) / 100 / count : 0;
 
     // t.net ze Stripe zawiera tylko potrącenie opłaty Stripe (t.fee)
     // application_fee (prowizja platformy 7%) to osobna transakcja — odejmujemy ręcznie
