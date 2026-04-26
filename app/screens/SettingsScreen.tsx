@@ -4,7 +4,7 @@
 // Ustawienia + pomoc Tap to Pay
 // ============================================
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
@@ -12,29 +12,36 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
+import { presentProximityReaderEducation } from '../proximityReaderEducation';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 import { C } from '../theme';
 import { useAppContext } from '../AppContext';
 import { API_URL, apiFetch } from '../config';
 
 export default function SettingsScreen({ navigation }: any) {
   const { onLogout } = useAppContext();
-  const { disconnectReader, discoverReaders } = useStripeTerminal();
+  const { disconnectReader } = useStripeTerminal();
   const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
+  const mountedRef = React.useRef(true);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    mountedRef.current = true;
     load();
-  }, []);
+    return () => { mountedRef.current = false; };
+  }, []));
 
   const load = async () => {
     try {
       const enabled = await AsyncStorage.getItem('tapToPayEnabled');
       const userEmail = await AsyncStorage.getItem('userEmail');
+      if (!mountedRef.current) return;
       setTapToPayEnabled(enabled === 'true');
       setEmail(userEmail || '');
     } catch { /* ignoruj błąd odczytu */ } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -60,8 +67,8 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
-  const handleShowTutorial = () => {
-    navigation.navigate('TapToPayEducation');
+  const handleShowTutorial = async () => {
+    await presentProximityReaderEducation();
   };
 
   const handleDeleteAccount = () => {
