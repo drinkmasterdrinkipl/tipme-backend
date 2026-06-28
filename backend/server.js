@@ -169,7 +169,7 @@ app.use((req, res, next) => {
     return next();
   }
   if (req.headers['x-api-key'] !== secret) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: 'Brak autoryzacji.' });
   }
   next();
 });
