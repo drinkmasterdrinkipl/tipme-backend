@@ -127,8 +127,9 @@ app.use('/api/auth/reset-password', loginLimiter);
 const receiptLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, message: { error: 'Zbyt wiele potwierdzeń. Poczekaj godzinę.' } });
 app.use('/api/send-receipt', receiptLimiter);
 
-// Ostrzejszy limit na account-status — endpoint publiczny, ograniczamy skanowanie
-const accountStatusLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: { error: 'Za dużo zapytań. Poczekaj chwilę.' } });
+// Limit na account-status — 60/15min pozwala na 2h polling co 30s (max 30 req)
+// + margin na ręczne sprawdzenie statusu i kilka urządzeń jednocześnie
+const accountStatusLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, message: { error: 'Za dużo zapytań. Poczekaj chwilę.' } });
 app.use('/api/account-status', accountStatusLimiter);
 
 // Webhook musi mieć raw body PRZED express.json()
@@ -185,8 +186,11 @@ const PLATFORM_FEE_PERCENT = 0.07; // 7% — prowizja platformy
 // Zapobiega płaceniu 0.40 zł Per Auth Fee
 // za każde przypadkowe/testowe tapnięcie
 // ============================================
-const PAYMENT_COOLDOWN_MS = 25 * 1000;  // 25 sekund między płatnościami
-const DAILY_PAYMENT_LIMIT = 50;          // max 50 prób dziennie na konto
+// Opłata Stripe (~0,40 zł) naliczana jest tylko za FAKTYCZNĄ płatność (przyłożona karta),
+// a nie za samo wybicie kwoty — więc długi cooldown był zbędny i blokował szybkie inkasowanie.
+// Zostaje minimalny bufor (3 s) tylko jako zabezpieczenie przed przypadkowym podwójnym obciążeniem.
+const PAYMENT_COOLDOWN_MS = 3 * 1000;    // 3 sekundy — tylko anty-podwójne-tapnięcie
+const DAILY_PAYMENT_LIMIT = 200;         // realny zapas dla zapracowanej zmiany
 
 const paymentLastTime = new Map();  // accountId -> timestamp ostatniej próby
 const paymentDailyCount = new Map(); // accountId -> { count, date }
@@ -847,13 +851,20 @@ app.post('/api/refund', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Brak uprawnień do tego konta' });
     }
 
-    // Blokuj zwroty starsze niż 2 dni — po tym czasie napiwek jest już wypłacony
-    // na konto bankowe i zwrot mógłby wprowadzić saldo na minus (ryzyko dla platformy)
     const charge = await stripe.charges.retrieve(chargeId, { stripeAccount: stripeAccountId });
-    const ageMs = Date.now() - charge.created * 1000;
-    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-    if (ageMs > ONE_DAY_MS) {
-      return res.status(400).json({ error: 'Zwrot możliwy tylko w ciągu 24h od transakcji.' });
+
+    // Sprawdź saldo przed zwrotem — opłata Stripe nie jest zwracana,
+    // więc konto musi mieć available >= kwota zwrotu + bufor.
+    // Jeśli środki są pending lub już wypłacone na konto bankowe, available = 0 → blokada.
+    const balance = await stripe.balance.retrieve({}, { stripeAccount: stripeAccountId });
+    const availableBalance = balance.available.find(b => b.currency === 'pln');
+    const availableAmount = (availableBalance?.amount || 0) / 100;
+    const refundAmount = charge.amount / 100;
+    const STRIPE_FEE_BUFFER = 0.50;
+    if (availableAmount < refundAmount + STRIPE_FEE_BUFFER) {
+      return res.status(400).json({
+        error: `Zwrot niemożliwy — środki jeszcze w rozliczeniu lub już wypłacone na konto bankowe. Dostępne saldo: ${availableAmount.toFixed(2)} zł.`
+      });
     }
 
     const refund = await stripe.refunds.create(
