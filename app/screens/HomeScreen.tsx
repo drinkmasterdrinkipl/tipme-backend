@@ -10,10 +10,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import { C } from '../theme';
 import { API_URL, apiFetch } from '../config';
+import type { TabScreenProps } from '../types';
 
 const TIP_PRESETS = [5, 10, 15, 20, 30, 40, 50, 100, 200];
 
-export default function HomeScreen({ navigation }: any) {
+export default function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState('');
   const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
@@ -36,9 +37,10 @@ export default function HomeScreen({ navigation }: any) {
   // Wymaganie Apple 5.6 + 1.6: warmup czytnika i weryfikacja statusu z SDK (nie z AsyncStorage)
   const warmupReader = useCallback(async () => {
     try {
-      // Wymaganie Apple 1.6: sprawdzamy registered users (locationId), nie lokalną flagę
       const locationId = await AsyncStorage.getItem('stripeLocationId');
-      if (!locationId) return; // niezarejestrowany użytkownik
+      if (!locationId) return;
+      const ttpEnabled = await AsyncStorage.getItem('tapToPayEnabled');
+      if (ttpEnabled !== 'true') return; // nie wywołuj discoverReaders dopóki user świadomie nie włączył TTP
       if (warmupDoneRef.current) return;
       // Upewnij się że SDK jest zainicjalizowane przed wywołaniem discoverReaders
       // (TerminalWarmup może jeszcze nie skończyć initialize() — eliminuje race condition)
@@ -68,7 +70,10 @@ export default function HomeScreen({ navigation }: any) {
     }).catch(() => {});
     // Wymaganie Apple 1.6: zawsze weryfikuj aktualny status z SDK
     warmupReader();
-    return () => { warmupDoneRef.current = false; };
+    return () => {
+      warmupDoneRef.current = false;
+      if (navigatingTimerRef.current) clearTimeout(navigatingTimerRef.current);
+    };
   }, [warmupReader]));
 
   const selectPreset = (val: number) => { setSelectedPreset(val); setCustomAmount(''); };

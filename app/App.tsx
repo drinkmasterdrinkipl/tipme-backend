@@ -7,13 +7,15 @@ import { Text, View, AppState, AppStateStatus, StatusBar, Linking, Platform } fr
 import { AppContext } from './AppContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { C } from './theme';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, CommonActions } from '@react-navigation/native';
+import type { NavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StripeTerminalProvider, useStripeTerminal } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from './config';
 import * as Notifications from 'expo-notifications';
+import type { RootStackParamList } from './types';
 
 // Wymaganie Apple 6.3: konfiguracja zachowania powiadomień
 Notifications.setNotificationHandler({
@@ -143,7 +145,7 @@ export default function App() {
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
 
-  const navigationRef = useRef<any>(null);
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const welcomeNavigatedRef = useRef(false);
   const pendingResetTokenRef = useRef<string | null>(null);
 
@@ -154,7 +156,6 @@ export default function App() {
       AsyncStorage.getItem('tapToPayWelcomeShown'),
     ]).then(([id, token, welcomeShown]) => {
       setIsOnboarded(!!(id && token));
-      // Jeśli zalogowany ale nigdy nie widział welcome — pokaż po załadowaniu
       if (id && token && !welcomeShown) setShowWelcome(true);
     }).catch(() => setIsOnboarded(false));
   }, []);
@@ -167,7 +168,6 @@ export default function App() {
     scheduleTapToPayLaunchNotification();
   }, []);
 
-
   const navigateToWelcome = useCallback(() => {
     if (!isOnboarded || !showWelcome || welcomeNavigatedRef.current) return;
     if (pendingResetTokenRef.current) return;  // reset link ma priorytet
@@ -176,11 +176,10 @@ export default function App() {
     navigationRef.current.navigate('TapToPayWelcome' as never, {} as never);
   }, [isOnboarded, showWelcome]);
 
-  // Opóźnienie 200ms daje czas Linking.getInitialURL na rozwiązanie przed welcome screen
   useEffect(() => {
-    const timer = setTimeout(navigateToWelcome, 200);
-    return () => clearTimeout(timer);
+    navigateToWelcome();
   }, [navigateToWelcome]);
+
 
   // Gdy isOnboarded się ustali i nawigacja jest gotowa — obsłuż oczekujący deep link
   useEffect(() => {
@@ -220,17 +219,26 @@ export default function App() {
   }, [navigateToReset]);
 
   useEffect(() => {
-    // Aplikacja otwarta przez link (zimny start)
+    // Tylko raz przy starcie — nie powtarzamy przy re-renderach
     Linking.getInitialURL().then(handleDeepLink).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     // Aplikacja już działała w tle
     const sub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
     return () => sub.remove();
   }, [handleDeepLink]);
 
   const handleLogout = useCallback(() => {
-    setIsOnboarded(false);
-    setShowWelcome(false);
+    pendingResetTokenRef.current = null;
     welcomeNavigatedRef.current = false;
+    setShowWelcome(false);
+    setIsOnboarded(false);
+    setTimeout(() => {
+      navigationRef.current?.dispatch(
+        CommonActions.reset({ index: 0, routes: [{ name: 'Onboarding' }] })
+      );
+    }, 0);
   }, []);
 
   const contextValue = useMemo(() => ({ onLogout: handleLogout }), [handleLogout]);

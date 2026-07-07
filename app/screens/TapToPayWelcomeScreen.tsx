@@ -11,8 +11,10 @@ import {
   ScrollView, ActivityIndicator, Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { presentProximityReaderEducation } from '../proximityReaderEducation';
+import type { StackScreenProps } from '../types';
 
-export default function TapToPayWelcomeScreen({ navigation }: any) {
+export default function TapToPayWelcomeScreen({ navigation }: StackScreenProps<'TapToPayWelcome'>) {
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -22,8 +24,7 @@ export default function TapToPayWelcomeScreen({ navigation }: any) {
       await AsyncStorage.setItem('tapToPayWelcomeShown', 'true');
       await AsyncStorage.setItem('tapToPayEnabled', 'true').catch(() => {});
       await AsyncStorage.setItem('tapToPayEducationShown', 'true').catch(() => {});
-      // Apple TTP acceptance sheet is triggered automatically by discoverReaders('tapToPay')
-      // in HomeScreen's warmupReader after navigation — no concurrent discovery needed here.
+      await presentProximityReaderEducation();
       navigation.goBack();
     } finally {
       setLoading(false);

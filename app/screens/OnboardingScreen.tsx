@@ -19,8 +19,9 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
+import type { OnboardingScreenProps, AccountStatusResponse, LoginResponse, CreateAccountResponse } from '../types';
 
-export default function OnboardingScreen({ navigation, onComplete }: any) {
+export default function OnboardingScreen({ navigation, onComplete }: OnboardingScreenProps) {
   const [step, setStep] = useState<'welcome' | 'prepare' | 'register' | 'login' | 'stripe' | 'done' | 'forgot-password' | 'forgot-sent'>('welcome');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -64,7 +65,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         body: JSON.stringify({ email, firstName, lastName, password }),
       });
 
-      const data = await res.json();
+      const data: CreateAccountResponse = await res.json();
       const { accountId, onboardingUrl } = data;
       if (res.status === 409) {
         if (data.incompleteRegistration) {
@@ -97,7 +98,11 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       });
       setStep('stripe');
     } catch (error: any) {
-      if (mountedRef.current) Alert.alert('Błąd', error.message || 'Nie udało się połączyć ze Stripe');
+      if (mountedRef.current) {
+        const m = error?.message || '';
+        const friendly = /network|fetch|failed|timeout|timed out|abort/i.test(m) ? 'Brak połączenia z internetem. Sprawdź sieć i spróbuj ponownie.' : (m || 'Nie udało się połączyć ze Stripe');
+        Alert.alert('Błąd', friendly);
+      }
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -134,7 +139,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       } finally {
         clearTimeout(timeout);
       }
-      const data = await res.json();
+      const data: LoginResponse = await res.json();
 
       // Konto bez hasła — od razu przekieruj do resetu przez email
       if (res.status === 403 && data.needsPasswordReset) {
@@ -170,7 +175,10 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
         setStep('stripe');
       }
     } catch (error: any) {
-      if (mountedRef.current) setLoginError(error.message || 'Brak połączenia — sprawdź internet');
+      if (mountedRef.current) {
+        const m = error?.message || '';
+        setLoginError(/network|fetch|failed|timeout|timed out|abort/i.test(m) ? 'Brak połączenia z internetem. Sprawdź sieć i spróbuj ponownie.' : (m || 'Brak połączenia — sprawdź internet'));
+      }
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -244,7 +252,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
       }
       const res = await apiFetch(`${API_URL}/api/account-status/${accountId}`);
       if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
-      const data = await res.json();
+      const data: AccountStatusResponse = await res.json();
       if (!mountedRef.current) return;
 
       if (data.chargesEnabled) {
@@ -297,14 +305,14 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
           <Text style={styles.logoIcon}>💜</Text>
           <Text style={styles.logoText}>Tip For Me</Text>
           <Text style={styles.tagline}>
-            Zbieraj napiwki kartą.{'\n'}Bez terminala, bez gotówki.
+            Napiwki kartą.{'\n'}Terminal na Twoim iPhonie.
           </Text>
 
           <View style={styles.features}>
             {[
               ['📱', 'Twój telefon = terminal'],
               ['💳', 'Klient przykłada kartę'],
-              ['⚡', 'Wypłata na konto bankowe (2-3 dni)'],
+              ['⚡', 'Wypłata na konto bankowe'],
               ['📊', 'Statystyki w czasie rzeczywistym'],
             ].map(([icon, text], i) => (
               <View key={i} style={styles.featureRow}>
@@ -426,7 +434,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
 
           <TextInput
             style={styles.emailInput}
-            placeholder="jan@example.com"
+            placeholder="adres@email.com"
             placeholderTextColor="#444"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -525,7 +533,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
 
           <TextInput
             style={styles.emailInput}
-            placeholder="jan@example.com"
+            placeholder="adres@email.com"
             placeholderTextColor="#444"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -656,7 +664,7 @@ export default function OnboardingScreen({ navigation, onComplete }: any) {
 
           <TextInput
             style={styles.emailInput}
-            placeholder="jan@example.com"
+            placeholder="adres@email.com"
             placeholderTextColor="#444"
             keyboardType="email-address"
             autoCapitalize="none"

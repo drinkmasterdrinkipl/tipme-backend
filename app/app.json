@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.drinki.tipme",
-      "buildNumber": "6",
+      "buildNumber": "36",
       "minimumOsVersion": "18.0",
       "infoPlist": {
         "NFCReaderUsageDescription": "Tip For Me używa NFC do przyjmowania płatności zbliżeniowych.",
@@ -26,7 +26,9 @@
           "bluetooth-central",
           "bluetooth-peripheral"
         ],
-        "UIRequiredDeviceCapabilities": ["nfc"]
+        "UIRequiredDeviceCapabilities": ["nfc"],
+        "CFBundleDevelopmentRegion": "pl",
+        "CFBundleLocalizations": ["pl", "en"]
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -35,13 +37,15 @@
     "plugins": [
       "expo-asset",
       "expo-font",
+      ["./plugins/set-deployment-target.js", { "version": "18.0" }],
       ["@stripe/stripe-terminal-react-native", {
         "bluetoothBackgroundMode": true,
         "locationWhenInUsePermission": "Tip For Me potrzebuje lokalizacji do przetwarzania płatności Tap to Pay.",
         "bluetoothPeripheralPermission": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart.",
         "bluetoothAlwaysUsagePermission": "Tip For Me używa Bluetooth do połączenia z czytnikiem kart."
       }],
-      "./plugins/remove-aps-environment.js"
+      "./plugins/remove-aps-environment.js",
+      "./plugins/add-proximity-reader-module.js"
     ],
     "extra": {
       "eas": {

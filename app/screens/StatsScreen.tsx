@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
 import { useRefreshOnNewDay } from '../hooks/useRefreshOnNewDay';
+import type { StatsDay, StatsResponse } from '../types';
 
 // ─── Helpers ─────────────────────────────────────────────
 const MONTHS = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
@@ -90,7 +91,7 @@ function Calendar({ selected, onSelect }: { selected: string; onSelect: (d: stri
 // ─── Main Screen ─────────────────────────────────────────
 export default function StatsScreen() {
   const [selectedDate, setSelectedDate] = useState(todayStr());
-  const [stats, setStats]   = useState<any>(null);
+  const [stats, setStats]   = useState<StatsDay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const mountedRef = useRef(true);
@@ -102,7 +103,7 @@ export default function StatsScreen() {
       if (!accountId) throw new Error('Brak ID konta. Zaloguj się ponownie.');
       const res = await apiFetch(`${API_URL}/api/stats/${accountId}?date=${date}`);
       if (!res.ok) throw new Error(`Błąd serwera (${res.status})`);
-      const data = await res.json();
+      const data: StatsResponse = await res.json();
       if (mountedRef.current) setStats(data.today ?? null);
     } catch (e: any) {
       if (mountedRef.current) setError(e.message || 'Nie udało się pobrać statystyk');
@@ -126,9 +127,10 @@ export default function StatsScreen() {
   const average     = count > 0 ? (Number(stats?.average) || total / count) : 0;
   // Rzeczywiste opłaty ze Stripe (gdy SIMULATED=false)
   // W trybie SIMULATED szacujemy dla pokazania UI
-  const stripeFee   = stats?.stripeFee   ?? (total * 0.014 + count * 0.25);
-  const platformFee = stats?.platformFee ?? total * 0.07;
-  const net         = stats?.net         ?? Math.max(0, total - stripeFee - platformFee);
+  const stripeFee      = stats?.stripeFee   ?? (total * 0.014 + count * 0.35);
+  const platformFee    = stats?.platformFee ?? total * 0.07;
+  const net            = stats?.net         ?? Math.max(0, total - stripeFee - platformFee);
+  const hasRealFees    = stats?.stripeFee != null && stats?.net != null;
 
   const isToday = selectedDate === todayStr();
   const dateLabel = isToday ? 'Dziś' : new Date(selectedDate + 'T12:00:00').toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -166,8 +168,8 @@ export default function StatsScreen() {
 
             <View style={s.grid}>
               {[
-                { label: 'ZEBRANO', value: `${total.toFixed(0)} zł`, color: C.primaryLight },
-                { label: 'NETTO', value: `${net.toFixed(2)} zł`, color: C.success },
+                { label: 'ZEBRANO (brutto)', value: `${total.toFixed(0)} zł`, color: C.primaryLight },
+                { label: hasRealFees ? 'NETTO' : 'NETTO (~szacunek)', value: `${net.toFixed(2)} zł`, color: C.success },
               ].map((c) => (
                 <View key={c.label} style={s.card}>
                   <Text style={s.cardLabel}>{c.label}</Text>
@@ -182,14 +184,19 @@ export default function StatsScreen() {
                 {[
                   ['Napiwki brutto', `${total.toFixed(2)} zł`, false],
                   ['Prowizja Tip For Me (7%)', `−${platformFee.toFixed(2)} zł`, false],
-                  ['Opłata Stripe (rzeczywista)', `−${stripeFee.toFixed(2)} zł`, false],
-                  ['Twój zarobek netto', `${net.toFixed(2)} zł`, true],
+                  [hasRealFees ? 'Opłata Stripe' : 'Opłata Stripe (~szacunek)', `−${stripeFee.toFixed(2)} zł`, false],
+                  [hasRealFees ? 'Twój zarobek netto' : 'Szacowany zarobek netto', `${net.toFixed(2)} zł`, true],
                 ].map(([label, val, highlight], i) => (
                   <View key={label as string} style={[s.breakdownRow, i > 0 && s.breakdownBorder]}>
                     <Text style={s.breakdownLabel}>{label as string}</Text>
                     <Text style={[s.breakdownVal, highlight && { color: C.success, fontWeight: '800' }]}>{val as string}</Text>
                   </View>
                 ))}
+                <Text style={s.breakdownNote}>
+                  {hasRealFees
+                    ? '* Dokładna kwota przelewu na konto bankowe widoczna w zakładce Portfel po rozliczeniu przez Stripe (ok. 5–7 dni roboczych od transakcji).'
+                    : '* Szacunek — rzeczywista kwota może się nieznacznie różnić. Środki pojawią się w Portfelu po rozliczeniu ze Stripe (ok. 5–7 dni roboczych od transakcji).'}
+                </Text>
               </View>
             )}
           </>
@@ -220,6 +227,7 @@ const s = StyleSheet.create({
   breakdownBorder: { borderTopWidth: 1, borderTopColor: C.cardBorder },
   breakdownLabel: { fontSize: 13, color: C.text3 },
   breakdownVal: { fontSize: 13, fontWeight: '700', color: C.text2 },
+  breakdownNote: { fontSize: 11, color: C.text4, padding: 12, paddingTop: 8, lineHeight: 16 },
 });
 
 const cal = StyleSheet.create({

@@ -9,6 +9,7 @@ import type { Reader } from '@stripe/stripe-terminal-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
+import type { StackScreenProps } from '../types';
 
 const CARD_ERROR_PHRASES = [
   'Niewystarczające środki',
@@ -20,7 +21,7 @@ const CARD_ERROR_PHRASES = [
 ];
 const isCardError = (msg: string) => CARD_ERROR_PHRASES.some(p => msg.includes(p));
 
-export default function TapScreen({ navigation, route }: any) {
+export default function TapScreen({ navigation, route }: StackScreenProps<'Tap'>) {
   const amount: number = route.params?.amount ?? 0;
   const amountZl = (amount / 100 % 1 === 0)
     ? (amount / 100).toFixed(0)
@@ -28,6 +29,7 @@ export default function TapScreen({ navigation, route }: any) {
 
   const [status, setStatus] = useState<'connecting' | 'ready' | 'processing' | 'confirming' | 'error'>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
+  const [reconnecting, setReconnecting] = useState(false); // czytnik chwilowo stracił połączenie i wznawia (np. ruch / przeskok sieci)
   const [initProgress, setInitProgress] = useState(0);
   const [initStep, setInitStep] = useState('Inicjalizacja SDK...');
   const discoveredRef = useRef<Reader.Type[]>([]);
@@ -85,6 +87,19 @@ export default function TapScreen({ navigation, route }: any) {
       setInitStep('Czytnik zaktualizowany...');
       setInitProgress(90);
     },
+    // Auto-reconnect: gdy czytnik chwilowo straci połączenie (telefon w ruchu, przeskok WiFi↔LTE),
+    // SDK próbuje wznowić sesję sam — pokazujemy łagodny komunikat zamiast od razu wyrzucać błąd.
+    onDidStartReaderReconnect: () => {
+      if (mountedRef.current) setReconnecting(true);
+    },
+    onDidSucceedReaderReconnect: () => {
+      if (mountedRef.current) setReconnecting(false);
+    },
+    onDidFailReaderReconnect: () => {
+      // Wznowienie się nie udało — zdejmujemy baner; trwająca operacja collect/confirm
+      // odrzuci się sama i obsłuży to catch w processPayment (komunikat po polsku).
+      if (mountedRef.current) setReconnecting(false);
+    },
   });
 
   const statusRef = useRef(status);
@@ -92,7 +107,7 @@ export default function TapScreen({ navigation, route }: any) {
 
   const translateError = useCallback((msg: string): string => {
     if (!msg) return 'Nieznany błąd';
-    if (msg.includes('osVersionNotSupported') || msg.includes('OS version') || msg.includes('PaymentCardReaderError')) return 'Ta funkcja wymaga iOS 17.6 lub nowszego. Zaktualizuj system w Ustawieniach iPhone\'a.';
+    if (msg.includes('osVersionNotSupported') || msg.includes('OS version') || msg.includes('PaymentCardReaderError')) return 'Ta funkcja wymaga iOS 18.0 lub nowszego. Zaktualizuj system w Ustawieniach → Ogólne → Uaktualnienia.';
     if (msg.includes('Already connected')) return 'Czytnik już połączony. Trwa rozłączanie, spróbuj ponownie.';
     if (msg.includes('Network request failed') || msg.includes('network') || msg.includes('-1009') || msg.includes('networkUnavailable')) return 'Brak połączenia z internetem. Sprawdź sieć i spróbuj ponownie.';
     if (msg.includes('timed out') || msg.includes('timeout') || msg.includes('Przekroczono czas') || msg.includes('pinEntryTimeout')) return 'Przekroczono czas oczekiwania. Spróbuj ponownie.';
@@ -115,7 +130,12 @@ export default function TapScreen({ navigation, route }: any) {
     if (msg.includes('No reader')) return 'Nie znaleziono czytnika.';
     if (msg.includes('location')) return 'Brak lokalizacji Stripe. Wyloguj się i zaloguj ponownie.';
     if (msg.includes('server') || msg.includes('Server') || msg.includes('500') || msg.includes('503') || msg.includes('readerServiceError')) return 'Błąd serwera. Spróbuj za chwilę.';
-    return msg;
+    // Utrata połączenia z czytnikiem — typowe gdy telefon jest w ruchu lub przełącza sieć (WiFi↔LTE) w trakcie płatności
+    if (msg.includes('disconnect') || msg.includes('Disconnect') || msg.includes('connection lost') || msg.includes('connectionLost') || msg.includes('reconnect') || msg.includes('Reconnect') || msg.includes('readerCommunicationError') || msg.includes('bluetooth') || msg.includes('Bluetooth')) return 'Utracono połączenie z czytnikiem. Zatrzymaj się na chwilę (nie ruszaj telefonem) i spróbuj ponownie.';
+    if (msg.includes('Reader') || msg.includes('reader') || msg.includes('PaymentIntent') || msg.includes('Stripe') || msg.includes('SdkError') || msg.includes('sdkError')) return 'Wystąpił problem z czytnikiem. Spróbuj ponownie.';
+    // Fallback: NIGDY nie pokazuj surowego angielskiego błędu użytkownikowi
+    console.log('[translateError] nieprzetłumaczony błąd:', msg);
+    return 'Coś poszło nie tak. Spróbuj ponownie za chwilę.';
   }, []);
 
   const processPayment = useCallback(async () => {
@@ -197,6 +217,7 @@ export default function TapScreen({ navigation, route }: any) {
         paymentIntentIdRef.current = null;
       }
       if (mountedRef.current) {
+        setReconnecting(false);
         setStatus('error');
         setErrorMsg(translateError(error.message || ''));
       }
@@ -244,7 +265,7 @@ export default function TapScreen({ navigation, route }: any) {
           ? parseFloat(Platform.Version)
           : Platform.Version;
         const [major, minor] = String(version).split('.').map(n => { const v = Number(n); return isNaN(v) ? 0 : v; });
-        if (major < 17 || (major === 17 && (minor ?? 0) < 6)) {
+        if (major < 18) {
           throw new Error('osVersionNotSupported');
         }
       }
@@ -335,13 +356,13 @@ export default function TapScreen({ navigation, route }: any) {
         {status === 'processing' && (
           <View style={s.statusPill}>
             <ActivityIndicator size="small" color={C.primaryLight} style={{ marginRight: 8 }} />
-            <Text style={s.statusPillText}>Oczekiwanie na płatność...</Text>
+            <Text style={s.statusPillText}>{reconnecting ? 'Ponowne łączenie z czytnikiem...' : 'Oczekiwanie na płatność...'}</Text>
           </View>
         )}
         {status === 'confirming' && (
           <View style={s.statusPill}>
             <ActivityIndicator size="small" color={C.primaryLight} style={{ marginRight: 8 }} />
-            <Text style={s.statusPillText}>Przetwarzanie płatności...</Text>
+            <Text style={s.statusPillText}>{reconnecting ? 'Ponowne łączenie z czytnikiem...' : 'Przetwarzanie płatności...'}</Text>
           </View>
         )}
         {status === 'error' && (

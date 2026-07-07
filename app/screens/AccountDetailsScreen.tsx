@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import { API_URL, apiFetch } from '../config';
 import { C } from '../theme';
+import type { RootStackParamList, AccountDetailsResponse, PayoutItem } from '../types';
 
 // Poza komponentem — zapobiega re-tworzeniu przy każdym renderze
 const Row = ({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) => (
@@ -18,8 +20,8 @@ const Row = ({ label, value, valueColor }: { label: string; value: string; value
 );
 
 export default function AccountDetailsScreen() {
-  const navigation = useNavigation<any>();
-  const [data, setData] = useState<any>(null);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [data, setData] = useState<AccountDetailsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -35,8 +37,8 @@ export default function AccountDetailsScreen() {
       const year = new Date().getFullYear();
       const res = await apiFetch(`${API_URL}/api/payouts-annual/${accountId}?year=${year}`);
       if (!res.ok) throw new Error('Błąd serwera');
-      const json = await res.json();
-      const payouts: any[] = json.payouts || [];
+      const json: { payouts: PayoutItem[] } = await res.json();
+      const payouts: PayoutItem[] = json.payouts || [];
 
       if (payouts.length === 0) {
         Alert.alert('Brak danych', `Nie masz jeszcze żadnych wypłat w ${year} roku.`);

@@ -6,10 +6,11 @@ import {
 } from 'react-native';
 import { C } from '../theme';
 import { API_URL, apiFetch } from '../config';
+import type { StackScreenProps } from '../types';
 
 const MESSAGES = ['Dziękuję!', 'Jesteś wspaniały!', 'Super, dzięki!', 'Wielkie dzięki!', 'Doceniam to!'];
 
-export default function SuccessScreen({ navigation, route }: any) {
+export default function SuccessScreen({ navigation, route }: StackScreenProps<'Success'>) {
   const { amount = '0', paymentMethod = 'Karta', last4 = '****' } = route.params ?? {};
   const [msg] = useState(() => MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
   const now = new Date();

@@ -6,10 +6,11 @@ import {
 } from 'react-native';
 import { API_URL, apiFetch } from '../config';
 import { useAppContext } from '../AppContext';
+import type { StackScreenProps } from '../types';
 
-export default function ResetPasswordScreen({ route, navigation }: any) {
+export default function ResetPasswordScreen({ route, navigation }: StackScreenProps<'ResetPassword'>) {
   const { onLogout } = useAppContext();
-  const token: string = route?.params?.token ?? '';
+  const token: string = route.params.token;
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -59,10 +60,7 @@ export default function ResetPasswordScreen({ route, navigation }: any) {
           </Text>
           <TouchableOpacity
             style={s.primaryBtn}
-            onPress={() => {
-              if (navigation.canGoBack()) navigation.goBack();
-              onLogout();
-            }}
+            onPress={onLogout}
           >
             <Text style={s.primaryBtnText}>Przejdź do logowania →</Text>
           </TouchableOpacity>

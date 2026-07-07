@@ -2,13 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import type { WebView as WebViewType } from 'react-native-webview';
+import type { WebViewNavigation, ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 import { C } from '../theme';
+import type { StackScreenProps } from '../types';
 
-export default function StripeWebViewScreen({ route, navigation }: any) {
-  const { url, onDone } = route.params ?? {};
+export default function StripeWebViewScreen({ route, navigation }: StackScreenProps<'StripeWebView'>) {
+  const { url, onDone } = route.params;
   const [loading, setLoading] = useState(true);
   const [webError, setWebError] = useState('');
-  const webviewRef = useRef<any>(null);
+  const webviewRef = useRef<WebViewType>(null);
   const mountedRef = useRef(true);
   const completedRef = useRef(false); // zapobiega wielokrotnemu wywołaniu onDone
 
@@ -24,7 +27,7 @@ export default function StripeWebViewScreen({ route, navigation }: any) {
 
   if (!url) return null;
 
-  const handleNavigationChange = (navState: any) => {
+  const handleNavigationChange = (navState: WebViewNavigation) => {
     if (!mountedRef.current || completedRef.current) return;
     // Stripe przekierowuje na refresh_url gdy sesja wygasła
     if (navState.url?.includes('/stripe/refresh')) {
@@ -34,7 +37,7 @@ export default function StripeWebViewScreen({ route, navigation }: any) {
   };
 
   // Przechwytuje URL zanim strona się załaduje — tylko podczas onboardingu (gdy onDone jest przekazane)
-  const handleShouldStartLoad = (request: any): boolean => {
+  const handleShouldStartLoad = (request: ShouldStartLoadRequest): boolean => {
     if (!mountedRef.current || completedRef.current) return true;
     if (typeof onDone === 'function' &&
       (request.url?.includes('/stripe/success') || request.url?.includes('return_url'))) {

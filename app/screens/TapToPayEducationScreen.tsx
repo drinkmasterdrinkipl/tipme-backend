@@ -11,6 +11,7 @@ import {
   ScrollView, useWindowDimensions, Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { StackScreenProps } from '../types';
 
 const SLIDES = [
   {
@@ -35,7 +36,7 @@ const SLIDES = [
     icon: '✓',
     title: 'Potwierdzenie płatności',
     desc: 'Po udanej płatności zobaczysz ekran sukcesu z kwotą i metodą płatności. Możesz wysłać potwierdzenie na email klienta.',
-    tip: 'Środki trafiają na Twoje konto Stripe i są automatycznie wypłacane na konto bankowe w ciągu 2–3 dni roboczych.',
+    tip: 'Środki trafiają na Twoje konto Stripe i są automatycznie wypłacane na konto bankowe w ciągu 7 dni roboczych. Z czasem okres ten się skraca.',
   },
   {
     icon: '🔢',
@@ -57,7 +58,7 @@ const SLIDES = [
   },
 ];
 
-export default function TapToPayEducationScreen({ navigation }: any) {
+export default function TapToPayEducationScreen({ navigation }: StackScreenProps<'TapToPayEducation'>) {
   const { width } = useWindowDimensions();
   const [currentSlide, setCurrentSlide] = useState(0);
   const finishingRef = useRef(false);

@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Switch, Alert, ActivityIndicator,
+  ScrollView, Switch, Alert, ActivityIndicator, Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
@@ -18,8 +18,9 @@ import { useCallback } from 'react';
 import { C } from '../theme';
 import { useAppContext } from '../AppContext';
 import { API_URL, apiFetch } from '../config';
+import type { TabScreenProps } from '../types';
 
-export default function SettingsScreen({ navigation }: any) {
+export default function SettingsScreen({ navigation }: TabScreenProps<'SettingsTab'>) {
   const { onLogout } = useAppContext();
   const { disconnectReader } = useStripeTerminal();
   const [tapToPayEnabled, setTapToPayEnabled] = useState(false);
@@ -233,7 +234,9 @@ export default function SettingsScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        <Text style={s.version}>Tip For Me v1.0 · Autor: Adrian Chwaściński</Text>
+        <TouchableOpacity onPress={() => Linking.openURL('https://adrianchwascinski.pl')} activeOpacity={0.7}>
+          <Text style={s.version}>Tip For Me v1.0 · Autor: Adrian Chwaściński</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
