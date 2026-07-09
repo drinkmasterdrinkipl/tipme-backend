@@ -284,7 +284,7 @@ app.post('/api/create-connected-account', async (req, res) => {
         transfers: { requested: true },
       },
       settings: {
-        payouts: { schedule: { interval: 'daily', delay_days: 'minimum' } },
+        payouts: { schedule: { interval: 'weekly', weekly_anchor: 'monday' } },
       },
       metadata: { password_hash: passwordHash },
     };
@@ -304,7 +304,7 @@ app.post('/api/create-connected-account', async (req, res) => {
       refresh_url: `https://tipforme.app/stripe/success.html`,
       return_url: `https://tipforme.app/stripe/success.html`,
       type: 'account_onboarding',
-      collection_options: { fields: 'eventually_due' },
+      collection_options: { fields: 'currently_due' },
     });
 
     res.json({
@@ -382,7 +382,7 @@ app.post('/api/auth/login', async (req, res) => {
           refresh_url: `https://tipforme.app/stripe/success.html`,
           return_url: `https://tipforme.app/stripe/success.html`,
           type: 'account_onboarding',
-          collection_options: { fields: 'eventually_due' },
+          collection_options: { fields: 'currently_due' },
         });
         onboardingUrl = accountLink.url;
       } catch { /* nie blokuj logowania jeśli link się nie wygeneruje */ }
@@ -1241,7 +1241,7 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
         refresh_url: `https://tipforme.app/stripe/success.html`,
         return_url: `https://tipforme.app/stripe/success.html`,
         type: 'account_onboarding',
-        collection_options: { fields: 'eventually_due' },
+        collection_options: { fields: 'currently_due' },
       });
       return res.json({ url: accountLink.url, requiresOnboarding: true });
     }
@@ -1261,7 +1261,7 @@ app.get('/api/dashboard-link/:accountId', authenticateToken, requireOwnership, a
   }
 });
 
-// Endpoint /api/payout usunięty — wypłaty są automatyczne (schedule: daily)
+// Endpoint /api/payout usunięty — wypłaty są automatyczne (schedule: weekly, poniedziałek)
 // Stripe sam przelewa dostępne środki każdego dnia roboczego na konto bankowe użytkownika
 
 
