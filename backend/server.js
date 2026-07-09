@@ -279,6 +279,7 @@ app.post('/api/create-connected-account', async (req, res) => {
       business_profile: {
         name: displayName,
         mcc: '7299',
+        url: 'https://tipforme.app', // auto-wypełnione — jedno pole mniej w rejestracji Stripe
       },
       capabilities: {
         card_payments: { requested: true },
