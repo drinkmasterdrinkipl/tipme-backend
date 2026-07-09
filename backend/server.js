@@ -998,23 +998,24 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
     const count          = payments.length;
     const average        = count > 0 ? payments.reduce((sum, t) => sum + t.amount, 0) / 100 / count : 0;
 
-    // Opłata Stripe = opłata za przetworzenie (t.fee) + opłata Tap to Pay (~0,40 zł za każdą płatność).
-    // Ta druga to osobna transakcja typu stripe_fee, więc doliczamy ją ręcznie (count × PER_AUTH_FEE).
-    const chargeStripeFee = relevant.reduce((sum, t) => sum + t.fee, 0) / 100;
-    const perAuthFee      = count * PER_AUTH_FEE;
-    const totalStripeFee  = chargeStripeFee + perAuthFee;
-
-    // application_fee (prowizja platformy 7%) to osobna transakcja — odejmujemy ręcznie
+    // WAŻNE: prowizja platformy 7% (application_fee) jest JUŻ potrącona w opłacie Stripe (t.fee)
+    // i zawarta w t.net — NIE wolno jej odejmować drugi raz. Pokazujemy ją tylko informacyjnie.
     const platformFee = totalAmount * PLATFORM_FEE_PERCENT;
+    // Stripe pobiera osobno opłatę Tap to Pay ~0,40 zł za każdą płatność (Per Auth Fee) — TĘ odejmujemy.
+    const perAuthFee = count * PER_AUTH_FEE;
+    // Realne netto (tyle wpada na konto bankowe): to co zostało po opłacie Stripe, minus opłata Tap to Pay.
+    const net = Math.max(0, totalNet - perAuthFee);
+    // Rozbicie do wyświetlenia tak, aby: brutto − prowizja − opłata Stripe = netto (spójne).
+    const stripeFee = Math.max(0, totalAmount - platformFee - net);
 
     res.json({
       today: {
         total: totalAmount,
         count,
         average,
-        stripeFee: totalStripeFee,
+        stripeFee,
         platformFee,
-        net: Math.max(0, totalNet - platformFee - perAuthFee),
+        net,
       },
     });
   } catch (error) {
