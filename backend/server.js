@@ -998,15 +998,26 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
     const count          = payments.length;
     const average        = count > 0 ? payments.reduce((sum, t) => sum + t.amount, 0) / 100 / count : 0;
 
-    // WAŻNE: prowizja platformy 7% (application_fee) jest JUŻ potrącona w opłacie Stripe (t.fee)
-    // i zawarta w t.net — NIE wolno jej odejmować drugi raz. Pokazujemy ją tylko informacyjnie.
-    const platformFee = totalAmount * PLATFORM_FEE_PERCENT;
-    // Stripe pobiera osobno opłatę Tap to Pay ~0,40 zł za każdą płatność (Per Auth Fee) — TĘ odejmujemy.
+    // Prowizja i opłata za przetworzenie czytane z PRAWDZIWEGO rozbicia Stripe (fee_details):
+    // application_fee = nasza prowizja, stripe_fee = koszt przetworzenia. Dzięki temu jest zawsze
+    // poprawne niezależnie od stawki użytej przy danym napiwku (historycznie 5%, obecnie 7%).
+    let platformFeeGr = 0, stripeProcessingGr = 0;
+    for (const t of relevant) {
+      for (const fd of (t.fee_details || [])) {
+        if (fd.type === 'application_fee') platformFeeGr += fd.amount;
+        else if (fd.type === 'stripe_fee') stripeProcessingGr += fd.amount;
+      }
+    }
+    const platformFee      = platformFeeGr / 100;       // realna prowizja (application_fee) — cokolwiek było ustawione
+    const stripeProcessing = stripeProcessingGr / 100;  // realna opłata za przetworzenie karty
+
+    // Osobna opłata Stripe Tap to Pay (~0,40 zł za każdą płatność) — powiązana z liczbą napiwków dnia.
     const perAuthFee = count * PER_AUTH_FEE;
-    // Realne netto (tyle wpada na konto bankowe): to co zostało po opłacie Stripe, minus opłata Tap to Pay.
+
+    // Realne netto (tyle wpada na konto): po opłacie Stripe (już zawiera prowizję) minus opłata Tap to Pay.
     const net = Math.max(0, totalNet - perAuthFee);
-    // Rozbicie do wyświetlenia tak, aby: brutto − prowizja − opłata Stripe = netto (spójne).
-    const stripeFee = Math.max(0, totalAmount - platformFee - net);
+    // Opłata Stripe pokazywana użytkownikowi = przetwarzanie + Tap to Pay (prowizja jest osobną pozycją).
+    const stripeFee = stripeProcessing + perAuthFee;
 
     res.json({
       today: {
