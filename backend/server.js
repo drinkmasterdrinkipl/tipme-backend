@@ -180,6 +180,7 @@ app.use((req, res, next) => {
 // Przykład: napiwek 20 zł = 2000 gr → prowizja = 140 gr = 1.40 zł
 // ============================================
 const PLATFORM_FEE_PERCENT = 0.07; // 7% — prowizja platformy
+const PER_AUTH_FEE = 0.40; // zł — opłata Stripe Tap to Pay za każdą faktyczną płatność (Per Auth Fee)
 
 // ============================================
 // RATE LIMITING — ochrona przed spamem
@@ -993,12 +994,16 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
 
     const payments       = relevant.filter(t => t.amount > 0);
     const totalAmount    = relevant.reduce((sum, t) => sum + t.amount, 0) / 100;
-    const totalStripeFee = relevant.reduce((sum, t) => sum + t.fee, 0) / 100;
     const totalNet       = relevant.reduce((sum, t) => sum + t.net, 0) / 100;
     const count          = payments.length;
     const average        = count > 0 ? payments.reduce((sum, t) => sum + t.amount, 0) / 100 / count : 0;
 
-    // t.net ze Stripe zawiera tylko potrącenie opłaty Stripe (t.fee)
+    // Opłata Stripe = opłata za przetworzenie (t.fee) + opłata Tap to Pay (~0,40 zł za każdą płatność).
+    // Ta druga to osobna transakcja typu stripe_fee, więc doliczamy ją ręcznie (count × PER_AUTH_FEE).
+    const chargeStripeFee = relevant.reduce((sum, t) => sum + t.fee, 0) / 100;
+    const perAuthFee      = count * PER_AUTH_FEE;
+    const totalStripeFee  = chargeStripeFee + perAuthFee;
+
     // application_fee (prowizja platformy 7%) to osobna transakcja — odejmujemy ręcznie
     const platformFee = totalAmount * PLATFORM_FEE_PERCENT;
 
@@ -1009,7 +1014,7 @@ app.get('/api/stats/:accountId', authenticateToken, requireOwnership, async (req
         average,
         stripeFee: totalStripeFee,
         platformFee,
-        net: Math.max(0, totalNet - platformFee),
+        net: Math.max(0, totalNet - platformFee - perAuthFee),
       },
     });
   } catch (error) {
