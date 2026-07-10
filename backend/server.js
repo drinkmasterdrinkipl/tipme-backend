@@ -353,9 +353,42 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
 
     users.sort((x, y) => y.volume - x.volume || y.commission - x.commission);
 
+    // === FINANSE PLATFORMY (Twoje) — saldo, prowizje, koszty Stripe, zysk netto ===
+    let balAvailGr = 0, balPendGr = 0;
+    try {
+      const bal = await stripe.balance.retrieve();
+      balAvailGr = (bal.available || []).reduce((s, x) => s + x.amount, 0);
+      balPendGr = (bal.pending || []).reduce((s, x) => s + x.amount, 0);
+    } catch (e) { /* pomiń */ }
+
+    let revenueGr = 0, refundGr = 0;
+    const costMap = {};
+    try {
+      let bsa = null;
+      for (let i = 0; i < 15; i++) { // cap 1500 transakcji salda
+        const bt = await stripe.balanceTransactions.list(bsa ? { limit: 100, starting_after: bsa } : { limit: 100 });
+        for (const t of bt.data) {
+          if (t.type === 'application_fee') revenueGr += t.net;
+          else if (t.type === 'application_fee_refund') refundGr += Math.abs(t.amount);
+          else if (t.type === 'stripe_fee' || (t.amount < 0 && t.reporting_category === 'fee')) {
+            const key = t.description || 'Opłata Stripe';
+            costMap[key] = (costMap[key] || 0) + Math.abs(t.amount);
+          }
+        }
+        if (!bt.has_more || bt.data.length === 0) break;
+        bsa = bt.data[bt.data.length - 1].id;
+      }
+    } catch (e) { /* pomiń */ }
+
+    const costs = Object.entries(costMap)
+      .map(([label, gr]) => ({ label, amount: gr / 100 }))
+      .sort((a, b) => b.amount - a.amount);
+    const totalCostsGr = Object.values(costMap).reduce((s, x) => s + x, 0);
+    const netProfitGr = revenueGr - refundGr - totalCostsGr;
+
     res.json({
       totals: {
-        commission: platCommissionGr / 100, // moja prowizja łącznie
+        commission: platCommissionGr / 100, // moja prowizja łącznie (z płatności)
         volume: platVolumeGr / 100,          // suma napiwków (obrót)
         count: platCount,
         users: users.length,
@@ -363,6 +396,15 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         pending: users.filter(u => u.status === 'pending').length,
         incomplete: users.filter(u => u.status === 'incomplete').length,
         restricted: users.filter(u => u.status === 'restricted').length,
+      },
+      platform: {
+        balanceAvailable: balAvailGr / 100,
+        balancePending: balPendGr / 100,
+        revenue: revenueGr / 100,      // prowizje netto (z salda)
+        refunds: refundGr / 100,
+        costs,                         // [{label, amount}] — Active Account Billing, Payout Fee, ...
+        totalCosts: totalCostsGr / 100,
+        netProfit: netProfitGr / 100,  // zysk = prowizje − zwroty − koszty Stripe
       },
       generatedAt: Math.floor(Date.now() / 1000),
       users,
@@ -372,8 +414,22 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
   }
 });
 
-// Strona panelu (HTML). Sam widok jest jawny, dane wymagają hasła.
-app.get('/admin', (req, res) => res.type('html').send(ADMIN_HTML));
+// Usuwanie konta połączonego (Express) — działa dla kont bez salda.
+// Konta Standard mogą odmówić (Stripe zwróci błąd — pokazujemy go w panelu).
+app.delete('/api/admin/account/:id', adminAuth, async (req, res) => {
+  const id = String(req.params.id || '');
+  if (!/^acct_[A-Za-z0-9]+$/.test(id)) return res.status(400).json({ error: 'Nieprawidłowe ID konta.' });
+  try {
+    const del = await stripe.accounts.del(id);
+    res.json({ ok: true, deleted: del.deleted === true, id });
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'Nie udało się usunąć konta.' });
+  }
+});
+
+// Strona panelu — kanoniczny adres to tipforme.app/admin (pełny panel).
+// Backendowy /admin serwuje prosty panel zapasowy albo przekierowuje.
+app.get('/admin', (req, res) => res.redirect(302, 'https://tipforme.app/admin'));
 
 // ============================================
 // SECURITY — weryfikacja API key
