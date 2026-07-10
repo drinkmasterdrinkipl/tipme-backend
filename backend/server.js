@@ -154,8 +154,226 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) =
 
 app.use(express.json());
 
+// ============================================
+// Widok panelu admina (HTML). Dane pobierane z /api/admin/overview (wymaga hasła).
+// ============================================
+const ADMIN_HTML = `<!doctype html>
+<html lang="pl"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>Panel — Tip For Me</title>
+<style>
+:root{--bg:#0b0817;--card:#141026;--bd:#241c3f;--txt:#e9e6f5;--mut:#9a91b8;--pur:#8b5cf6;--grn:#34d399;--yel:#fbbf24;--red:#f87171}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,Inter,Segoe UI,Roboto,sans-serif;line-height:1.5;padding:24px}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font-size:22px;font-weight:800;margin-bottom:4px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:24px}
+.login{max-width:360px;margin:12vh auto;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:28px}
+.login h2{font-size:18px;margin-bottom:16px}
+input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--bd);background:#0e0a1e;color:var(--txt);font-size:15px}
+button{width:100%;margin-top:12px;padding:12px;border:0;border-radius:10px;background:var(--pur);color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+button:hover{opacity:.92}
+.err{color:var(--red);font-size:13px;margin-top:10px;min-height:16px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px 18px}
+.card .lbl{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+.card .val{font-size:24px;font-weight:800;margin-top:6px}
+.card.hi{border-color:var(--pur)}.card.hi .val{color:var(--pur)}
+.statline{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 22px;color:var(--mut);font-size:13px}
+.statline b{color:var(--txt)}
+.tbl{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+th,td{text-align:left;padding:12px 14px;font-size:13px;border-bottom:1px solid var(--bd);vertical-align:top}
+th{color:var(--mut);text-transform:uppercase;font-size:11px;letter-spacing:.5px}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+.pill.verified{background:rgba(52,211,153,.15);color:var(--grn)}
+.pill.pending{background:rgba(251,191,36,.15);color:var(--yel)}
+.pill.incomplete{background:rgba(154,145,184,.15);color:var(--mut)}
+.pill.restricted{background:rgba(248,113,113,.15);color:var(--red)}
+.mono{font-family:ui-monospace,monospace;color:var(--mut);font-size:11px;word-break:break-all}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:12px}
+.refresh{width:auto;padding:9px 14px;margin:0;font-size:13px;background:#1c1636}
+@media(max-width:760px){.cards{grid-template-columns:1fr 1fr}body{padding:14px}.hidem{display:none}}
+</style></head>
+<body><div class="wrap">
+  <div id="login" class="login">
+    <h2>🔒 Panel Tip For Me</h2>
+    <input id="pw" type="password" placeholder="Hasło administratora" autocomplete="current-password"/>
+    <button onclick="login()">Wejdź</button>
+    <div id="err" class="err"></div>
+  </div>
+  <div id="panel" style="display:none">
+    <div class="top">
+      <div><h1>Panel — Tip For Me</h1><div class="sub" id="gen"></div></div>
+      <button class="refresh" onclick="load()">Odśwież</button>
+    </div>
+    <div class="cards" id="cards"></div>
+    <div class="statline" id="statline"></div>
+    <table class="tbl"><thead><tr>
+      <th>Użytkownik</th><th>Status</th>
+      <th class="num">Napiwki</th><th class="num">Zarobił</th><th class="num">Moja prowizja</th>
+      <th class="hidem">Konto Stripe</th>
+    </tr></thead><tbody id="tbody"></tbody></table>
+  </div>
+</div>
+<script>
+var KEY='';
+function fmt(n){return (Number(n)||0).toFixed(2).replace('.',',')+' zł';}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function plName(s){return s==='verified'?'✅ Zweryfikowany':s==='pending'?'⏳ W trakcie':s==='restricted'?'⛔ Zablokowany':'❌ Niedokończony';}
+function fail(m){document.getElementById('err').textContent=m;sessionStorage.removeItem('tk');}
+function login(){KEY=document.getElementById('pw').value;document.getElementById('err').textContent='Ładowanie…';load();}
+function card(l,v,hi){return '<div class="card'+(hi?' hi':'')+'"><div class="lbl">'+l+'</div><div class="val">'+v+'</div></div>';}
+function load(){
+  fetch('/api/admin/overview',{headers:{'x-admin-key':KEY}}).then(function(r){
+    if(r.status===401){fail('Błędne hasło');return;}
+    if(r.status===503){fail('Serwer: brak ADMIN_PASSWORD (ustaw w Render)');return;}
+    if(!r.ok){fail('Błąd serwera ('+r.status+')');return;}
+    return r.json().then(render);
+  }).catch(function(){fail('Błąd połączenia');});
+}
+function render(d){
+  sessionStorage.setItem('tk',KEY);
+  document.getElementById('login').style.display='none';
+  document.getElementById('panel').style.display='block';
+  var t=d.totals;
+  document.getElementById('cards').innerHTML=card('Moja prowizja łącznie',fmt(t.commission),true)+card('Suma napiwków',fmt(t.volume))+card('Liczba napiwków',t.count)+card('Użytkownicy',t.users);
+  document.getElementById('statline').innerHTML='✅ Zweryfikowani: <b>'+t.verified+'</b> · ⏳ W trakcie: <b>'+t.pending+'</b> · ❌ Niedokończeni: <b>'+t.incomplete+'</b> · ⛔ Zablokowani: <b>'+t.restricted+'</b>';
+  var rows='';
+  d.users.forEach(function(u){
+    var who=esc(u.email||u.name||'—')+(u.name&&u.email?'<div class="mono">'+esc(u.name)+'</div>':'');
+    rows+='<tr><td>'+who+'</td><td><span class="pill '+u.status+'">'+plName(u.status)+'</span></td><td class="num">'+u.count+'</td><td class="num">'+fmt(u.volume)+'</td><td class="num">'+fmt(u.commission)+'</td><td class="hidem mono">'+esc(u.id)+'</td></tr>';
+  });
+  document.getElementById('tbody').innerHTML=rows||'<tr><td colspan="6" style="color:#9a91b8">Brak kont</td></tr>';
+  var dt=new Date((d.generatedAt||0)*1000);
+  document.getElementById('gen').textContent='Dane na żywo ze Stripe · '+dt.toLocaleString('pl-PL');
+}
+var saved=sessionStorage.getItem('tk');
+if(saved){KEY=saved;load();}
+document.getElementById('pw').addEventListener('keydown',function(e){if(e.key==='Enter')login();});
+</script></body></html>`;
+
 // Health check przed API key — UptimeRobot nie wysyła X-Api-Key
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+// ============================================
+// PANEL ADMINA (tylko właściciel) — PRZED strażnikiem API_SECRET
+// Chroniony osobnym hasłem ADMIN_PASSWORD (ustaw w Render → Environment).
+// Serwowany z tego samego origina co API → brak problemów z CORS.
+// ============================================
+function adminAuth(req, res, next) {
+  const pass = process.env.ADMIN_PASSWORD;
+  if (!pass) return res.status(503).json({ error: 'ADMIN_PASSWORD nie jest ustawiony na serwerze.' });
+  const provided = String(req.headers['x-admin-key'] || '');
+  const a = Buffer.from(provided);
+  const b = Buffer.from(String(pass));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).json({ error: 'Błędne hasło.' });
+  }
+  next();
+}
+
+// Rate limit na logowanie do panelu — anty brute-force
+const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: { error: 'Za dużo prób. Poczekaj 15 minut.' } });
+app.use('/api/admin/', adminLimiter);
+
+// Dane do panelu: konta, weryfikacja, zarobki, prowizje
+app.get('/api/admin/overview', adminAuth, async (req, res) => {
+  try {
+    // 1) wszystkie konta połączone (paginacja, cap 1000)
+    const accts = [];
+    let sa = null;
+    for (let i = 0; i < 10; i++) {
+      const page = await stripe.accounts.list(sa ? { limit: 100, starting_after: sa } : { limit: 100 });
+      accts.push(...page.data);
+      if (!page.has_more || page.data.length === 0) break;
+      sa = page.data[page.data.length - 1].id;
+    }
+
+    const users = [];
+    let platVolumeGr = 0, platCommissionGr = 0, platCount = 0;
+
+    for (const a of accts) {
+      const rq = a.requirements || {};
+      let status;
+      if (a.charges_enabled && a.payouts_enabled && a.details_submitted) status = 'verified';
+      else if (rq.disabled_reason) status = 'restricted';
+      else if (a.details_submitted) status = 'pending';
+      else status = 'incomplete';
+
+      // Zarobki + prowizja tylko dla kont, które mogą przyjmować płatności
+      let volumeGr = 0, commissionGr = 0, count = 0;
+      if (a.charges_enabled) {
+        try {
+          let csa = null;
+          for (let j = 0; j < 5; j++) { // cap 500 płatności / konto
+            const cp = await stripe.charges.list(
+              csa ? { limit: 100, starting_after: csa } : { limit: 100 },
+              { stripeAccount: a.id }
+            );
+            for (const c of cp.data) {
+              if (c.paid && c.status === 'succeeded' && !c.refunded) {
+                volumeGr += c.amount;
+                commissionGr += (c.application_fee_amount || 0);
+                count++;
+              }
+            }
+            if (!cp.has_more || cp.data.length === 0) break;
+            csa = cp.data[cp.data.length - 1].id;
+          }
+        } catch (e) { /* konto może odmówić dostępu — pomiń */ }
+      }
+
+      platVolumeGr += volumeGr;
+      platCommissionGr += commissionGr;
+      platCount += count;
+
+      const name = (a.business_profile && a.business_profile.name)
+        || (a.individual ? `${a.individual.first_name || ''} ${a.individual.last_name || ''}`.trim() : '')
+        || '';
+
+      users.push({
+        id: a.id,
+        email: a.email || (a.individual && a.individual.email) || '',
+        name,
+        status,
+        chargesEnabled: !!a.charges_enabled,
+        payoutsEnabled: !!a.payouts_enabled,
+        detailsSubmitted: !!a.details_submitted,
+        currentlyDue: (rq.currently_due || []).length,
+        created: a.created,
+        volume: volumeGr / 100,
+        commission: commissionGr / 100,
+        count,
+      });
+    }
+
+    users.sort((x, y) => y.volume - x.volume || y.commission - x.commission);
+
+    res.json({
+      totals: {
+        commission: platCommissionGr / 100, // moja prowizja łącznie
+        volume: platVolumeGr / 100,          // suma napiwków (obrót)
+        count: platCount,
+        users: users.length,
+        verified: users.filter(u => u.status === 'verified').length,
+        pending: users.filter(u => u.status === 'pending').length,
+        incomplete: users.filter(u => u.status === 'incomplete').length,
+        restricted: users.filter(u => u.status === 'restricted').length,
+      },
+      generatedAt: Math.floor(Date.now() / 1000),
+      users,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Strona panelu (HTML). Sam widok jest jawny, dane wymagają hasła.
+app.get('/admin', (req, res) => res.type('html').send(ADMIN_HTML));
 
 // ============================================
 // SECURITY — weryfikacja API key
