@@ -421,9 +421,18 @@ app.delete('/api/admin/account/:id', adminAuth, async (req, res) => {
   if (!/^acct_[A-Za-z0-9]+$/.test(id)) return res.status(400).json({ error: 'Nieprawidłowe ID konta.' });
   try {
     const del = await stripe.accounts.del(id);
-    res.json({ ok: true, deleted: del.deleted === true, id });
-  } catch (e) {
-    res.status(400).json({ error: e.message || 'Nie udało się usunąć konta.' });
+    return res.json({ ok: true, deleted: del.deleted === true, method: 'deleted', id });
+  } catch (e1) {
+    // Konto Standard nie da się usunąć — spróbuj je ROZŁĄCZYĆ przez OAuth (jeśli ustawiony client_id)
+    if (process.env.STRIPE_CLIENT_ID) {
+      try {
+        await stripe.oauth.deauthorize({ client_id: process.env.STRIPE_CLIENT_ID, stripe_user_id: id });
+        return res.json({ ok: true, deleted: true, method: 'disconnected', id });
+      } catch (e2) {
+        return res.status(400).json({ error: e2.message || e1.message, standard: true });
+      }
+    }
+    return res.status(400).json({ error: e1.message || 'Nie udało się usunąć konta.', standard: true, needClientId: true });
   }
 });
 
