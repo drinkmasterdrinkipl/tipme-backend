@@ -84,6 +84,10 @@ export default function StripeWebViewScreen({ route, navigation }: StackScreenPr
             startInLoadingState={false}
             keyboardDisplayRequiresUserAction={false}
             allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+            mediaCapturePermissionGrantType="grant"
+            allowsProtectedMedia
+            allowFileAccess
             scrollEnabled
             automaticallyAdjustContentInsets={false}
             contentInsetAdjustmentBehavior="never"

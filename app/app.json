@@ -18,10 +18,12 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.drinki.tipme",
-      "buildNumber": "36",
+      "buildNumber": "37",
       "minimumOsVersion": "18.0",
       "infoPlist": {
         "NFCReaderUsageDescription": "Tip For Me używa NFC do przyjmowania płatności zbliżeniowych.",
+        "NSCameraUsageDescription": "Tip For Me potrzebuje dostępu do aparatu, aby zweryfikować Twoją tożsamość (zdjęcie dokumentu i selfie) podczas zakładania konta.",
+        "NSPhotoLibraryUsageDescription": "Tip For Me potrzebuje dostępu do zdjęć, aby dołączyć dokument tożsamości podczas weryfikacji konta.",
         "UIBackgroundModes": [
           "bluetooth-central",
           "bluetooth-peripheral"
