@@ -3,7 +3,7 @@
     "name": "Tip For Me",
     "slug": "tipme",
     "scheme": "tipforme",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.drinki.tipme",
-      "buildNumber": "37",
+      "buildNumber": "38",
       "minimumOsVersion": "18.0",
       "infoPlist": {
         "NFCReaderUsageDescription": "Tip For Me używa NFC do przyjmowania płatności zbliżeniowych.",
