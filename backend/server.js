@@ -298,11 +298,14 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
 
     for (const a of accts) {
       const rq = a.requirements || {};
+      const dr = rq.disabled_reason || '';
+      // "Naprawdę zablokowane" = odrzucone/wstrzymane przez Stripe (NIE zwykły brak danych)
+      const hardBlocked = dr.startsWith('rejected') || ['platform_paused', 'listed', 'under_review', 'other'].includes(dr);
       let status;
       if (a.charges_enabled && a.payouts_enabled && a.details_submitted) status = 'verified';
-      else if (rq.disabled_reason) status = 'restricted';
-      else if (a.details_submitted) status = 'pending';
-      else status = 'incomplete';
+      else if (hardBlocked) status = 'restricted';       // realnie zablokowane
+      else if (!a.details_submitted) status = 'incomplete'; // nie dokończył rejestracji
+      else status = 'pending';                            // wysłał dane, czeka na weryfikację/uzupełnienie
 
       // Zarobki + prowizja tylko dla kont, które mogą przyjmować płatności
       let volumeGr = 0, commissionGr = 0, count = 0;
@@ -344,6 +347,8 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         payoutsEnabled: !!a.payouts_enabled,
         detailsSubmitted: !!a.details_submitted,
         currentlyDue: (rq.currently_due || []).length,
+        reason: dr,
+        type: a.type || '',
         created: a.created,
         volume: volumeGr / 100,
         commission: commissionGr / 100,
