@@ -992,6 +992,13 @@ app.post('/api/create-location', authenticateToken, async (req, res) => {
       ? displayName.trim().slice(0, 100)
       : 'Tip For Me';
 
+    // Idempotentnie: jeśli konto ma już lokalizację, zwróć ją zamiast tworzyć kolejną.
+    // Zapobiega mnożeniu lokalizacji i naprawia „Brak lokalizacji Stripe" przy ponownym logowaniu.
+    const existingLocs = await stripe.terminal.locations.list({ limit: 1 }, { stripeAccount: stripeAccountId });
+    if (existingLocs.data.length > 0) {
+      return res.json({ locationId: existingLocs.data[0].id });
+    }
+
     const location = await stripe.terminal.locations.create(
       {
         display_name: safeName,
