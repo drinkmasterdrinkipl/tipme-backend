@@ -11,6 +11,7 @@ export default function StripeWebViewScreen({ route, navigation }: StackScreenPr
   const { url, onDone, email } = route.params;
   const [loading, setLoading] = useState(true);
   const [webError, setWebError] = useState('');
+  const [hintOpen, setHintOpen] = useState(true); // checklista rejestracji — zwijana
   const webviewRef = useRef<WebViewType>(null);
   const mountedRef = useRef(true);
   const completedRef = useRef(false); // zapobiega wielokrotnemu wywołaniu onDone
@@ -62,10 +63,22 @@ export default function StripeWebViewScreen({ route, navigation }: StackScreenPr
       </View>
 
       {email ? (
-        <View style={s.hint}>
-          <Text style={s.hintText}>💡 Gdy Stripe zapyta o email — podaj ten sam co w aplikacji:</Text>
-          <Text style={s.hintEmail}>{email}</Text>
-        </View>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => setHintOpen(o => !o)} style={s.hint}>
+          <View style={s.hintHead}>
+            <Text style={s.hintTitle}>💡 Podpowiedzi do rejestracji</Text>
+            <Text style={s.hintToggle}>{hintOpen ? '▲ zwiń' : '▼ rozwiń'}</Text>
+          </View>
+          {hintOpen ? (
+            <View style={s.hintBody}>
+              <Text style={s.hintLine}>✉️  „email do konta Express" — podaj ten sam: <Text style={s.hintStrong}>{email}</Text></Text>
+              <Text style={s.hintLine}>📱  telefon — kod SMS</Text>
+              <Text style={s.hintLine}>🏠  adres — ulica, miasto, kod</Text>
+              <Text style={s.hintLine}>🏦  numer konta bankowego — w Stripe „IBAN": „PL" z przodu (jeśli masz konto w Polsce) + Twój numer konta</Text>
+              <Text style={s.hintLine}>🆔  PESEL — przyspiesza weryfikację konta</Text>
+              <Text style={s.hintLine}>🪪  dokument + selfie — dla zagranicznych</Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
       ) : null}
 
       {webError ? (
@@ -130,8 +143,12 @@ const s = StyleSheet.create({
   closeTxt: { color: C.text3, fontSize: 14, fontWeight: '700' },
   title: { fontSize: 15, fontWeight: '800', color: C.text1 },
   hint: { backgroundColor: 'rgba(139,92,246,0.12)', borderBottomWidth: 1, borderBottomColor: C.cardBorder, paddingHorizontal: 16, paddingVertical: 10 },
-  hintText: { color: C.text3, fontSize: 13 },
-  hintEmail: { color: C.primaryLight, fontSize: 15, fontWeight: '700', marginTop: 2 },
+  hintHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  hintTitle: { color: '#b9a5f5', fontSize: 13, fontWeight: '800' },
+  hintToggle: { color: '#9a95b5', fontSize: 12, fontWeight: '700' },
+  hintBody: { marginTop: 8 },
+  hintLine: { color: '#d5d0e8', fontSize: 12.5, lineHeight: 19, marginTop: 3 },
+  hintStrong: { color: '#c4b5fd', fontWeight: '800' },
   loader: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',

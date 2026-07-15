@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.drinki.tipme",
-      "buildNumber": "39",
+      "buildNumber": "40",
       "minimumOsVersion": "18.0",
       "infoPlist": {
         "NFCReaderUsageDescription": "Tip For Me używa NFC do przyjmowania płatności zbliżeniowych.",
