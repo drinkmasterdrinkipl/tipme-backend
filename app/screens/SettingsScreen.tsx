@@ -235,7 +235,7 @@ export default function SettingsScreen({ navigation }: TabScreenProps<'SettingsT
         </View>
 
         <TouchableOpacity onPress={() => Linking.openURL('https://adrianchwascinski.pl')} activeOpacity={0.7}>
-          <Text style={s.version}>Tip For Me v1.0 · Autor: Adrian Chwaściński</Text>
+          <Text style={s.version}>Tip For Me v1.0.2 · Autor: Adrian Chwaściński</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

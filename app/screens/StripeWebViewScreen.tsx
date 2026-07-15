@@ -8,7 +8,7 @@ import { C } from '../theme';
 import type { StackScreenProps } from '../types';
 
 export default function StripeWebViewScreen({ route, navigation }: StackScreenProps<'StripeWebView'>) {
-  const { url, onDone } = route.params;
+  const { url, onDone, email } = route.params;
   const [loading, setLoading] = useState(true);
   const [webError, setWebError] = useState('');
   const webviewRef = useRef<WebViewType>(null);
@@ -60,6 +60,13 @@ export default function StripeWebViewScreen({ route, navigation }: StackScreenPr
         <Text style={s.title}>Konfiguracja konta</Text>
         <View style={{ width: 36 }} />
       </View>
+
+      {email ? (
+        <View style={s.hint}>
+          <Text style={s.hintText}>💡 Gdy Stripe zapyta o email — podaj ten sam co w aplikacji:</Text>
+          <Text style={s.hintEmail}>{email}</Text>
+        </View>
+      ) : null}
 
       {webError ? (
         <View style={s.errorWrap}>
@@ -122,6 +129,9 @@ const s = StyleSheet.create({
   },
   closeTxt: { color: C.text3, fontSize: 14, fontWeight: '700' },
   title: { fontSize: 15, fontWeight: '800', color: C.text1 },
+  hint: { backgroundColor: 'rgba(139,92,246,0.12)', borderBottomWidth: 1, borderBottomColor: C.cardBorder, paddingHorizontal: 16, paddingVertical: 10 },
+  hintText: { color: C.text3, fontSize: 13 },
+  hintEmail: { color: C.primaryLight, fontSize: 15, fontWeight: '700', marginTop: 2 },
   loader: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',

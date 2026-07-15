@@ -12,7 +12,7 @@ export type RootStackParamList = {
   TapToPayWelcome: Record<string, never>;
   TapToPayEducation: undefined;
   Settings: undefined;
-  StripeWebView: { url: string; onDone?: () => void };
+  StripeWebView: { url: string; onDone?: () => void; email?: string };
   AccountDetails: undefined;
   ResetPassword: { token: string };
 };

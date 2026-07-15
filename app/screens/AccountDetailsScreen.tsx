@@ -68,65 +68,77 @@ export default function AccountDetailsScreen() {
 <head>
   <meta charset="UTF-8">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, Arial, sans-serif; color: #1a1a1a; padding: 40px; }
-    .header { text-align: center; margin-bottom: 36px; }
-    .logo { font-size: 28px; font-weight: 900; color: #9333ea; letter-spacing: -0.5px; margin-bottom: 4px; }
-    .subtitle { font-size: 13px; color: #666; }
-    .meta { background: #f8f5ff; border: 1px solid #e9d5ff; border-radius: 12px; padding: 18px 24px; margin-bottom: 28px; }
-    .meta-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
-    .meta-label { color: #666; }
-    .meta-value { font-weight: 700; color: #1a1a1a; }
-    h2 { font-size: 11px; font-weight: 800; letter-spacing: 2px; color: #666; margin-bottom: 12px; text-transform: uppercase; }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: -apple-system, Arial, sans-serif; color: #1a1424; background: #fff; }
+    .band { background: linear-gradient(120deg, #7c3aed, #a855f7); padding: 32px 44px 38px; color: #fff; }
+    .brandrow { display: flex; align-items: center; gap: 14px; }
+    .brandlogo { width: 54px; height: 54px; display: block; flex: 0 0 auto; }
+    .band .logo { font-size: 27px; font-weight: 900; letter-spacing: -0.5px; }
+    .band .subtitle { font-size: 13px; opacity: 0.92; margin-top: 4px; }
+    .wrap { padding: 0 44px 44px; }
+    .hero { background: #f6f2ff; border: 1px solid #e6ddff; border-radius: 16px; padding: 24px 28px; margin: -22px 0 28px; }
+    .hero .lbl { font-size: 11px; color: #7c6f97; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
+    .hero .big { font-size: 42px; font-weight: 900; color: #7c3aed; letter-spacing: -1px; margin-top: 8px; line-height: 1; }
+    .hero .cnt { font-size: 13px; color: #8a85a4; margin-top: 8px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 6px 40px; margin-bottom: 28px; font-size: 12.5px; }
+    .meta .row { display: flex; gap: 8px; }
+    .meta .l { color: #8a8598; }
+    .meta .v { font-weight: 700; color: #1a1424; }
+    h2 { font-size: 11px; font-weight: 800; letter-spacing: 2px; color: #8a8598; margin-bottom: 12px; text-transform: uppercase; }
     table { width: 100%; border-collapse: collapse; }
-    th { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px; border-bottom: 2px solid #e5e7eb; text-align: left; }
+    th { font-size: 10px; font-weight: 700; color: #a09ab5; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px; border-bottom: 2px solid #ece8f4; text-align: left; }
     th:last-child { text-align: right; }
-    td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; font-size: 14px; color: #1a1a1a; }
+    td { padding: 13px 14px; border-bottom: 1px solid #f4f2f9; font-size: 14px; color: #1a1424; }
     tr:last-child td { border-bottom: none; }
-    .total-row { background: #f8f5ff; border-top: 2px solid #9333ea; }
-    .total-row td { font-size: 15px; font-weight: 900; color: #9333ea; padding: 16px 14px; }
-    .footer { margin-top: 36px; text-align: center; font-size: 11px; color: #aaa; line-height: 1.8; }
-    .note { margin-top: 20px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px; font-size: 12px; color: #555; line-height: 1.6; }
+    .note { margin-top: 26px; background: #faf9fc; border: 1px solid #eeecf4; border-radius: 10px; padding: 14px 16px; font-size: 11.5px; color: #6b6678; line-height: 1.6; }
+    .footer { margin-top: 22px; text-align: center; font-size: 10.5px; color: #b0abc0; line-height: 1.8; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="logo">Tip For Me</div>
-    <div class="subtitle">Roczne zestawienie wypłat na konto bankowe</div>
+  <div class="band">
+    <div class="brandrow">
+      <img class="brandlogo" src="https://tipforme.app/logo.png" alt="">
+      <div>
+        <div class="logo">Tip For Me</div>
+        <div class="subtitle">Roczne zestawienie wypłat na konto bankowe</div>
+      </div>
+    </div>
   </div>
+  <div class="wrap">
+    <div class="hero">
+      <div class="lbl">Łącznie wypłacono w ${year} roku</div>
+      <div class="big">${total.toFixed(2)} zł</div>
+      <div class="cnt">${paid.length} wypłat na konto bankowe</div>
+    </div>
 
-  <div class="meta">
-    <div class="meta-row"><span class="meta-label">Konto</span><span class="meta-value">${email}</span></div>
-    <div class="meta-row"><span class="meta-label">Rok rozliczeniowy</span><span class="meta-value">${year}</span></div>
-    <div class="meta-row"><span class="meta-label">Wygenerowano</span><span class="meta-value">${generatedAt}</span></div>
-    <div class="meta-row"><span class="meta-label">Liczba wypłat</span><span class="meta-value">${paid.length}</span></div>
-  </div>
+    <div class="meta">
+      <div class="row"><span class="l">Konto:</span><span class="v">${email}</span></div>
+      <div class="row"><span class="l">Rok:</span><span class="v">${year}</span></div>
+      <div class="row"><span class="l">Wygenerowano:</span><span class="v">${generatedAt}</span></div>
+    </div>
 
-  <h2>Wypłaty na konto bankowe</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Data wpływu</th>
-        <th>Status</th>
-        <th style="text-align:right">Kwota</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows}
-      <tr class="total-row">
-        <td colspan="2">ŁĄCZNIE WYPŁACONO W ${year} ROKU</td>
-        <td style="text-align:right">${total.toFixed(2)} zł</td>
-      </tr>
-    </tbody>
-  </table>
+    <h2>Wypłaty na konto bankowe</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Data wpływu</th>
+          <th>Status</th>
+          <th style="text-align:right">Kwota</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
 
-  <div class="note">
-    Zestawienie obejmuje wyłącznie środki faktycznie wysłane na konto bankowe w roku ${year}.
-    Kwoty po potrąceniu prowizji platformy. Dokument wygenerowany automatycznie przez aplikację Tip For Me.
-  </div>
+    <div class="note">
+      Zestawienie obejmuje wyłącznie środki faktycznie wysłane na konto bankowe w roku ${year}.
+      Kwoty po potrąceniu prowizji platformy. Dokument wygenerowany automatycznie przez aplikację Tip For Me.
+    </div>
 
-  <div class="footer">
-    Tip For Me · tipforme.app · Obsługiwane przez Stripe Payments Europe Ltd.
+    <div class="footer">
+      Tip For Me · tipforme.app · Obsługiwane przez Stripe Payments Europe Ltd.
+    </div>
   </div>
 </body>
 </html>`;

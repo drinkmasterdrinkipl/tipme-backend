@@ -1,7 +1,7 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useState, useCallback, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, TextInput,
+  View, Text, TouchableOpacity, TextInput, Image,
   StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import { SymbolView } from 'expo-symbols';
@@ -97,9 +97,12 @@ export default function HomeScreen({ navigation }: TabScreenProps<'Home'>) {
     <SafeAreaView style={s.root}>
       {/* Header — zawsze na górze */}
       <View style={s.header}>
-        <View>
-          <Text style={s.brand}>Tip For Me</Text>
-          <Text style={s.brandSub}>Terminal napiwkowy</Text>
+        <View style={s.brandRow}>
+          <Image source={require('../assets/logo.png')} style={s.logoImg} />
+          <View>
+            <Text style={s.brand}>Tip For Me</Text>
+            <Text style={s.brandSub}>Terminal napiwkowy</Text>
+          </View>
         </View>
         <View style={s.badge}>
           <View style={s.badgeDot} />
@@ -206,6 +209,8 @@ const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 8,
   },
+  brandRow: { flexDirection: 'row', alignItems: 'center' },
+  logoImg: { width: 36, height: 36, marginRight: 10, resizeMode: 'contain' },
   brand: { fontSize: 20, fontWeight: '800', color: C.text1, letterSpacing: -0.5 },
   brandSub: { fontSize: 11, color: C.text3, marginTop: 1, fontWeight: '500' },
   badge: {

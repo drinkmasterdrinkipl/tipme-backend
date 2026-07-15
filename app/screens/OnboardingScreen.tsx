@@ -94,6 +94,7 @@ export default function OnboardingScreen({ navigation, onComplete }: OnboardingS
       setOnboardingUrl(onboardingUrl);
       navigation.navigate('StripeWebView', {
         url: onboardingUrl,
+        email,
         onDone: () => setTimeout(() => checkStripeStatus(), 3000),
       });
       setStep('stripe');
@@ -167,6 +168,7 @@ export default function OnboardingScreen({ navigation, onComplete }: OnboardingS
         setOnboardingUrl(data.onboardingUrl);
         navigation.navigate('StripeWebView', {
           url: data.onboardingUrl,
+          email,
           onDone: () => setTimeout(() => checkStripeStatus(), 3000),
         });
         setStep('stripe');
@@ -636,7 +638,7 @@ export default function OnboardingScreen({ navigation, onComplete }: OnboardingS
             style={styles.secondaryBtn}
             onPress={() => {
               if (onboardingUrl) {
-                navigation.navigate('StripeWebView', { url: onboardingUrl, onDone: () => checkStripeStatus() });
+                navigation.navigate('StripeWebView', { url: onboardingUrl, email, onDone: () => checkStripeStatus() });
               }
             }}
           >

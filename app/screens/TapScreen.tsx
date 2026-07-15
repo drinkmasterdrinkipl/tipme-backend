@@ -301,9 +301,37 @@ export default function TapScreen({ navigation, route }: StackScreenProps<'Tap'>
 
       setInitStep('Łączenie...');
       setInitProgress(80);
-      const locationId = await AsyncStorage.getItem('stripeLocationId');
+      // Lokalizacja Stripe — samonaprawianie: jeśli brak lokalnie, utwórz ją teraz
+      // (nie zmuszaj usera do wyloguj/zaloguj). Backend zwraca istniejącą jeśli konto już ma.
+      const createLoc = async (): Promise<string | null> => {
+        try {
+          const accId = await AsyncStorage.getItem('stripeAccountId');
+          if (!accId) return null;
+          const r = await apiFetch(`${API_URL}/api/create-location`, {
+            method: 'POST',
+            body: JSON.stringify({ stripeAccountId: accId, displayName: 'Tip For Me' }),
+          });
+          if (!r.ok) return null;
+          const d = await r.json();
+          if (d.locationId) { await AsyncStorage.setItem('stripeLocationId', d.locationId); return d.locationId; }
+          return null;
+        } catch { return null; }
+      };
+
+      let locationId = await AsyncStorage.getItem('stripeLocationId');
+      if (!locationId) locationId = await createLoc();
       if (!locationId) throw new Error('Brak lokalizacji Stripe. Wyloguj się i zaloguj ponownie.');
-      const { error: connectError } = await connectReader({ discoveryMethod: 'tapToPay', reader: readers[0], locationId });
+
+      let { error: connectError } = await connectReader({ discoveryMethod: 'tapToPay', reader: readers[0], locationId });
+      // Lokalizacja mogła zostać usunięta (np. skasowane konto) — odtwórz i spróbuj raz jeszcze
+      if (connectError && /location/i.test(connectError.message || '')) {
+        await AsyncStorage.removeItem('stripeLocationId');
+        const fresh = await createLoc();
+        if (fresh) {
+          const retry = await connectReader({ discoveryMethod: 'tapToPay', reader: readers[0], locationId: fresh });
+          connectError = retry.error;
+        }
+      }
       if (connectError) throw new Error(connectError.message);
 
       setInitProgress(100);
