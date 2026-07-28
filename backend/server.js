@@ -132,6 +132,42 @@ app.use('/api/send-receipt', receiptLimiter);
 const accountStatusLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, message: { error: 'Za dużo zapytań. Poczekaj chwilę.' } });
 app.use('/api/account-status', accountStatusLimiter);
 
+// ============================================
+// POWIADOMIENIA WŁAŚCICIELA — „wpadła Ci prowizja"
+// Dwa niezależne kanały, każdy włącza się osobno przez zmienną środowiskową:
+//   NTFY_TOPIC          → natychmiastowy push przez ntfy.sh (apka na telefonie)
+//   OWNER_NOTIFY_EMAIL  → e-mail na wskazany adres (domyślnie chwascinski@icloud.com)
+// Oba są fire-and-forget — nie blokują odpowiedzi 200 dla Stripe.
+// ============================================
+async function sendNtfy(message) {
+  const topic = process.env.NTFY_TOPIC;
+  if (!topic) return;
+  try {
+    await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+      method: 'POST',
+      headers: { 'Title': 'Tip For Me', 'Tags': 'moneybag', 'Priority': 'default' },
+      body: message,
+    });
+  } catch (e) { console.error('ntfy notify error:', e.message); }
+}
+
+async function sendOwnerEmail(subject, text) {
+  const to = process.env.OWNER_NOTIFY_EMAIL || 'chwascinski@icloud.com';
+  if (!to || !process.env.SMTP_USER) return;
+  try {
+    await mailer.sendMail({ from: `"Tip For Me" <${process.env.SMTP_USER}>`, to, subject, text });
+  } catch (e) { console.error('owner email notify error:', e.message); }
+}
+
+function notifyOwnerNewTip(fee) {
+  const commission = (fee.amount || 0) / 100;               // moja prowizja (grosze → zł)
+  const tip = commission > 0 ? commission / PLATFORM_FEE_PERCENT : 0; // szacowana kwota napiwku
+  const acct = fee.account ? String(fee.account).slice(-6) : '';
+  const msg = `Nowy napiwek: ${tip.toFixed(2)} zł\nTwoja prowizja: ${commission.toFixed(2)} zł${acct ? `\nKonto: …${acct}` : ''}`;
+  sendNtfy(`💰 ${msg}`).catch(() => {});
+  sendOwnerEmail(`💰 Prowizja ${commission.toFixed(2)} zł — Tip For Me`, msg).catch(() => {});
+}
+
 // Webhook musi mieć raw body PRZED express.json()
 app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -143,13 +179,18 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) =
   } catch (err) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
+  // Odpowiedz Stripe od razu, potem przetwarzaj (Stripe oczekuje szybkiego 2xx)
+  res.json({ received: true });
   switch (event.type) {
+    case 'application_fee.created':
+      // Prowizja platformy naliczona = ktoś dostał napiwek → powiadom właściciela
+      notifyOwnerNewTip(event.data.object);
+      break;
     case 'payment_intent.succeeded':
     case 'account.updated':
     default:
       break;
   }
-  res.json({ received: true });
 });
 
 app.use(express.json());
