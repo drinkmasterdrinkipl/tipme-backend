@@ -160,11 +160,24 @@ async function sendOwnerEmail(subject, text) {
   } catch (e) { console.error('owner email notify error:', e.message); }
 }
 
-function notifyOwnerNewTip(fee) {
+async function notifyOwnerNewTip(fee) {
   const commission = (fee.amount || 0) / 100;               // moja prowizja (grosze → zł)
   const tip = commission > 0 ? commission / PLATFORM_FEE_PERCENT : 0; // szacowana kwota napiwku
-  const acct = fee.account ? String(fee.account).slice(-6) : '';
-  const msg = `Nowy napiwek: ${tip.toFixed(2)} zł\nTwoja prowizja: ${commission.toFixed(2)} zł${acct ? `\nKonto: …${acct}` : ''}`;
+  // Dociągnij imię i nazwisko kelnera z konta Stripe (fee.account = ID konta połączonego)
+  let who = '';
+  if (fee.account) {
+    try {
+      const acct = await stripe.accounts.retrieve(fee.account);
+      const fullName = acct.individual
+        ? `${acct.individual.first_name || ''} ${acct.individual.last_name || ''}`.trim()
+        : '';
+      who = fullName
+        || (acct.business_profile && acct.business_profile.name)
+        || acct.email
+        || `…${String(fee.account).slice(-6)}`;
+    } catch { who = `…${String(fee.account).slice(-6)}`; }
+  }
+  const msg = `Nowy napiwek: ${tip.toFixed(2)} zł\nTwoja prowizja: ${commission.toFixed(2)} zł${who ? `\nKelner: ${who}` : ''}`;
   sendNtfy(`💰 ${msg}`).catch(() => {});
   sendOwnerEmail(`💰 Prowizja ${commission.toFixed(2)} zł — Tip For Me`, msg).catch(() => {});
 }
@@ -185,7 +198,7 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) =
   switch (event.type) {
     case 'application_fee.created':
       // Prowizja platformy naliczona = ktoś dostał napiwek → powiadom właściciela
-      notifyOwnerNewTip(event.data.object);
+      notifyOwnerNewTip(event.data.object).catch(() => {});
       break;
     case 'payment_intent.succeeded':
     case 'account.updated':
