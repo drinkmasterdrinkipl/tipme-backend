@@ -152,7 +152,8 @@ async function sendNtfy(message) {
 }
 
 async function sendOwnerEmail(subject, text) {
-  const to = process.env.OWNER_NOTIFY_EMAIL || 'chwascinski@icloud.com';
+  // E-mail wyłączony domyślnie — wysyła się TYLKO gdy ustawiony OWNER_NOTIFY_EMAIL.
+  const to = process.env.OWNER_NOTIFY_EMAIL;
   if (!to || !process.env.SMTP_USER) return;
   try {
     await mailer.sendMail({ from: `"Tip For Me" <${process.env.SMTP_USER}>`, to, subject, text });
