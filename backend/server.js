@@ -142,13 +142,27 @@ app.use('/api/account-status', accountStatusLimiter);
 async function sendNtfy(message) {
   const topic = process.env.NTFY_TOPIC;
   if (!topic) return;
-  try {
-    await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
-      method: 'POST',
-      headers: { 'Title': 'Tip For Me', 'Tags': 'moneybag', 'Priority': 'default' },
-      body: message,
-    });
-  } catch (e) { console.error('ntfy notify error:', e.message); }
+  const url = `https://ntfy.sh/${encodeURIComponent(topic)}`;
+  const ATTEMPTS = 3;
+  for (let i = 1; i <= ATTEMPTS; i++) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000); // twardy timeout 8s
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Title': 'Tip For Me', 'Tags': 'moneybag', 'Priority': 'default' },
+        body: message,
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) return;                         // sukces
+      throw new Error(`HTTP ${res.status}`);      // np. 429/500 też traktuj jako błąd i ponów
+    } catch (e) {
+      console.error(`ntfy notify error (próba ${i}/${ATTEMPTS}):`, e.message);
+      if (i < ATTEMPTS) await new Promise((r) => setTimeout(r, 1500 * i)); // backoff 1.5s, 3s
+    }
+  }
+  console.error('ntfy notify: NIE wysłano po', ATTEMPTS, 'próbach — powiadomienie utracone');
 }
 
 async function sendOwnerEmail(subject, text) {
