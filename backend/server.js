@@ -6,6 +6,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const https = require('https');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const nodemailer = require('nodemailer');
 const bcrypt = require('bcryptjs');
@@ -351,6 +352,101 @@ function adminAuth(req, res, next) {
 const adminLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: { error: 'Za dużo prób. Poczekaj 15 minut.' } });
 app.use('/api/admin/', adminLimiter);
 
+// ============================================
+// REALNE KOSZTY STRIPE PER KONTO — raport "Fees itemized" (Reporting API).
+// W transakcjach salda opłaty Connect są zbiorcze (miesięczne), ale raport
+// all_fees.*.itemized.2 podaje każdą opłatę z incurred_by (np. ID wypłaty)
+// i oknem aktywności (activity_start/end) — stąd przypisanie co do grosza.
+// Raport generuje się do ~1 min i obejmuje opłaty starsze niż ~96h.
+// ============================================
+const FEE_REPORT_TYPE = 'all_fees.balance_transaction_created.itemized.2';
+const feeReport = { rows: null, at: 0, coveredEndSec: 0, running: false, lastError: null };
+
+function httpsGetText(url, headers, redirects = 3) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects > 0) {
+        res.resume();
+        return resolve(httpsGetText(res.headers.location, headers, redirects - 1));
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode)); }
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => resolve(body));
+    }).on('error', reject);
+  });
+}
+
+function parseCsv(text) {
+  const rows = []; let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n') { row.push(field); field = ''; if (row.length > 1 || row[0] !== '') rows.push(row); row = []; }
+    else if (ch !== '\r') field += ch;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function parseReportTs(s) {
+  if (!s) return 0;
+  const t = Date.parse(s.includes('T') ? s : s.replace(' ', 'T') + 'Z');
+  return Number.isFinite(t) ? Math.floor(t / 1000) : 0;
+}
+
+async function refreshFeeReport() {
+  if (feeReport.running) return;
+  feeReport.running = true;
+  try {
+    const rt = await stripe.reporting.reportTypes.retrieve(FEE_REPORT_TYPE);
+    const run = await stripe.reporting.reportRuns.create({
+      report_type: FEE_REPORT_TYPE,
+      parameters: {
+        interval_start: rt.data_available_start,
+        interval_end: rt.data_available_end,
+        columns: ['amount', 'tax', 'currency', 'fee_description', 'incurred_by', 'incurred_by_type', 'activity_start_time', 'activity_end_time', 'product', 'feature_name'],
+      },
+    });
+    let r = run;
+    for (let i = 0; i < 60 && r.status === 'pending'; i++) {
+      await new Promise((s) => setTimeout(s, 3000));
+      r = await stripe.reporting.reportRuns.retrieve(run.id);
+    }
+    if (r.status !== 'succeeded' || !r.result || !r.result.url) throw new Error('Raport Stripe: status ' + r.status);
+    const csv = await httpsGetText(r.result.url, { Authorization: 'Bearer ' + process.env.STRIPE_SECRET_KEY });
+    const rows = parseCsv(csv);
+    const head = (rows.shift() || []).map((h) => h.trim());
+    const col = (n) => head.indexOf(n);
+    const iAmt = col('amount'), iTax = col('tax'), iDesc = col('fee_description'),
+      iBy = col('incurred_by'), iByT = col('incurred_by_type'),
+      iAs = col('activity_start_time'), iAe = col('activity_end_time');
+    feeReport.rows = rows.map((c) => ({
+      // amount + tax = pełne obciążenie salda (kwoty w jednostkach głównych waluty)
+      amountGr: Math.round(Math.abs(parseFloat(c[iAmt]) || 0) * 100) + Math.round(Math.abs(parseFloat(c[iTax]) || 0) * 100),
+      desc: (iDesc >= 0 && c[iDesc]) || '',
+      by: (iBy >= 0 && c[iBy]) || '',
+      byType: (iByT >= 0 && c[iByT]) || '',
+      actStart: (iAs >= 0 && c[iAs]) || '',
+      actEnd: (iAe >= 0 && c[iAe]) || '',
+    }));
+    feeReport.coveredEndSec = rt.data_available_end;
+    feeReport.at = Date.now();
+    feeReport.lastError = null;
+    console.log(`📊 Raport opłat Stripe: ${feeReport.rows.length} pozycji (do ${new Date(rt.data_available_end * 1000).toISOString().slice(0, 10)})`);
+  } catch (e) {
+    feeReport.lastError = e.message;
+    console.error('Raport opłat Stripe nieudany:', e.message);
+  } finally {
+    feeReport.running = false;
+  }
+}
+
 // Dane do panelu: konta, weryfikacja, zarobki, prowizje
 app.get('/api/admin/overview', adminAuth, async (req, res) => {
   try {
@@ -380,7 +476,6 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
 
       // Zarobki + prowizja tylko dla kont, które mogą przyjmować płatności
       let volumeGr = 0, commissionGr = 0, count = 0;
-      const monthsActive = new Set(); // miesiące z ≥1 napiwkiem — za te Stripe nalicza Active Account Billing
       if (a.charges_enabled) {
         try {
           let csa = null;
@@ -394,7 +489,6 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
                 volumeGr += c.amount;
                 commissionGr += (c.application_fee_amount || 0);
                 count++;
-                monthsActive.add(new Date(c.created * 1000).toISOString().slice(0, 7));
               }
             }
             if (!cp.has_more || cp.data.length === 0) break;
@@ -403,9 +497,12 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         } catch (e) { /* konto może odmówić dostępu — pomiń */ }
       }
 
-      // Opłaty za wypłaty tego konta (płaci platforma: 1,35 zł + 0,25% od kwoty).
-      // Wyliczone regułą cennika; niżej skalowane do realnej sumy "Payout Fee" z salda.
+      // Wypłaty tego konta: ID (do mapowania realnych opłat z raportu Stripe na konto),
+      // czasy (Stripe: konto "aktywne" = miesiąc z wypłatą → Active Account Billing)
+      // oraz szacunek opłat wg cennika (1,35 zł + 0,25%) jako fallback bez raportu.
       let payoutFeeEstGr = 0;
+      const payoutIds = [];
+      const payoutTimes = [];
       if (a.payouts_enabled && volumeGr > 0) {
         try {
           let psa = null;
@@ -417,6 +514,8 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
             for (const p of pp.data) {
               if (p.status !== 'canceled' && p.status !== 'failed') {
                 payoutFeeEstGr += 135 + Math.round(p.amount * 0.0025);
+                payoutIds.push(p.id);
+                payoutTimes.push(p.created);
               }
             }
             if (!pp.has_more || pp.data.length === 0) break;
@@ -448,9 +547,11 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         volume: volumeGr / 100,
         commission: commissionGr / 100,
         count,
-        activeMonths: monthsActive.size,
+        activeMonths: new Set(payoutTimes.map((t) => new Date(t * 1000).toISOString().slice(0, 7))).size,
         _volumeGr: volumeGr,
         _payoutFeeEstGr: payoutFeeEstGr,
+        _payoutIds: payoutIds,
+        _payoutTimes: payoutTimes,
       });
     }
 
@@ -488,36 +589,79 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       }
     } catch (e) { /* pomiń */ }
 
-    // === KOSZT PER USER — alokacja realnych kosztów Stripe na konta ===
-    // Active Account Billing: płaska stawka × liczba aktywnych miesięcy konta
-    // (stawka = realna suma ze Stripe ÷ suma aktywnych konto-miesięcy, więc całość sumuje się co do grosza).
-    // Payout Fee: reguła 1,35 zł + 0,25% per wypłata, przeskalowana do realnej sumy ze Stripe.
-    // Volume Billing: proporcjonalnie do obrotu konta.
-    // Konta Standard nie kosztują platformy: Active Account Billing, Payout Fee i Volume
-    // Billing Stripe nalicza tylko za Express/Custom (Standard płaci swoje opłaty sam,
-    // z własnego salda) — dlatego Standard nie bierze udziału w alokacji, koszt = 0.
-    const billed = users.filter(u => u.type !== 'standard');
-    const totalActiveMonths = billed.reduce((s, u) => s + u.activeMonths, 0);
-    const totalPayoutEstGr = billed.reduce((s, u) => s + u._payoutFeeEstGr, 0);
-    const billedVolumeGr = billed.reduce((s, u) => s + u._volumeGr, 0);
-    const billingRateGr = totalActiveMonths > 0 ? activeBillingGr / totalActiveMonths : 0;
-    const payoutScale = totalPayoutEstGr > 0 ? payoutFeeGr / totalPayoutEstGr : 0;
-    for (const u of users) {
-      const costUserGr = u.type === 'standard' ? 0
-        : u.activeMonths * billingRateGr
-        + u._payoutFeeEstGr * payoutScale
-        + (billedVolumeGr > 0 ? (u._volumeGr / billedVolumeGr) * volumeBillingGr : 0);
-      u.cost = Math.round(costUserGr) / 100;
-      u.pnl = Math.round(u.commission * 100 - costUserGr) / 100;
-      delete u._volumeGr;
-      delete u._payoutFeeEstGr;
-    }
-
     const costs = Object.entries(costMap)
       .map(([label, gr]) => ({ label, amount: gr / 100 }))
       .sort((a, b) => b.amount - a.amount);
     const totalCostsGr = Object.values(costMap).reduce((s, x) => s + x, 0);
     const netProfitGr = revenueGr - refundGr - totalCostsGr;
+
+    // === KOSZT PER USER ===
+    // Źródło nr 1: REALNE opłaty z raportu Stripe "Fees itemized" — każda pozycja
+    // przypisana do konta po ID wypłaty (incurred_by) albo po oknie aktywności
+    // (Active Account Billing dzielone równo na konta z wypłatą w tym oknie;
+    // wg Stripe "aktywne konto" = miesiąc, w którym poszła wypłata).
+    // Fallback (raport jeszcze się generuje / błąd): szacunek wg cennika Connect.
+    // Konta Standard nie kosztują platformy (Stripe bilinguje tylko Express/Custom),
+    // więc w raporcie po prostu nie występują, a w fallbacku dostają 0.
+    if (!feeReport.rows || Date.now() - feeReport.at > 6 * 3600 * 1000) refreshFeeReport(); // w tle, bez await
+    const billed = users.filter(u => u.type !== 'standard');
+    let costAllocation;
+    if (feeReport.rows) {
+      const poToAcct = {};
+      for (const u of users) for (const id of u._payoutIds) poToAcct[id] = u.id;
+      const exactGr = {};
+      let reportTotalGr = 0, unallocatedGr = 0;
+      for (const it of feeReport.rows) {
+        const gr = it.amountGr;
+        reportTotalGr += gr;
+        if (/^acct_/.test(it.by)) { exactGr[it.by] = (exactGr[it.by] || 0) + gr; continue; }
+        if (it.byType === 'payout' && poToAcct[it.by]) { const a = poToAcct[it.by]; exactGr[a] = (exactGr[a] || 0) + gr; continue; }
+        if (!it.by) {
+          // opłata okresowa (np. Active Account Billing) — równy podział na konta
+          // Express z wypłatą w oknie aktywności opłaty
+          const s = parseReportTs(it.actStart), e = parseReportTs(it.actEnd) || Infinity;
+          const active = billed.filter(u => u._payoutTimes.some(t => t >= s && t <= e));
+          if (active.length) {
+            const per = Math.floor(gr / active.length);
+            active.forEach((u, i) => { exactGr[u.id] = (exactGr[u.id] || 0) + per + (i === 0 ? gr - per * active.length : 0); });
+            continue;
+          }
+        }
+        unallocatedGr += gr; // opłata bez przypisania (np. wypłata usuniętego konta)
+      }
+      for (const u of users) {
+        const gr = exactGr[u.id] || 0;
+        u.cost = gr / 100;
+        u.pnl = Math.round(u.commission * 100 - gr) / 100;
+      }
+      costAllocation = {
+        source: 'stripe-itemized',            // realne pozycje z raportu Stripe
+        reportedThrough: feeReport.coveredEndSec, // raport nie widzi opłat z ostatnich ~96h
+        unallocated: unallocatedGr / 100,
+        notYetReported: Math.max(0, totalCostsGr - reportTotalGr) / 100,
+      };
+    } else {
+      const totalActiveMonths = billed.reduce((s, u) => s + u.activeMonths, 0);
+      const totalPayoutEstGr = billed.reduce((s, u) => s + u._payoutFeeEstGr, 0);
+      const billedVolumeGr = billed.reduce((s, u) => s + u._volumeGr, 0);
+      const billingRateGr = totalActiveMonths > 0 ? activeBillingGr / totalActiveMonths : 0;
+      const payoutScale = totalPayoutEstGr > 0 ? payoutFeeGr / totalPayoutEstGr : 0;
+      for (const u of users) {
+        const costUserGr = u.type === 'standard' ? 0
+          : u.activeMonths * billingRateGr
+          + u._payoutFeeEstGr * payoutScale
+          + (billedVolumeGr > 0 ? (u._volumeGr / billedVolumeGr) * volumeBillingGr : 0);
+        u.cost = Math.round(costUserGr) / 100;
+        u.pnl = Math.round(u.commission * 100 - costUserGr) / 100;
+      }
+      costAllocation = { source: 'estimate', generating: feeReport.running, error: feeReport.lastError };
+    }
+    for (const u of users) {
+      delete u._volumeGr;
+      delete u._payoutFeeEstGr;
+      delete u._payoutIds;
+      delete u._payoutTimes;
+    }
 
     res.json({
       totals: {
@@ -539,6 +683,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         totalCosts: totalCostsGr / 100,
         netProfit: netProfitGr / 100,  // zysk = prowizje − zwroty − koszty Stripe
       },
+      costAllocation,
       generatedAt: Math.floor(Date.now() / 1000),
       users,
     });

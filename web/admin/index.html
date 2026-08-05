@@ -135,7 +135,15 @@ function render(d){
   document.getElementById('statline').innerHTML='✅ Zweryfikowani: <b>'+t.verified+'</b> · ⏳ W trakcie: <b>'+t.pending+'</b> · ❌ Niedokończeni: <b>'+t.incomplete+'</b> · ⛔ Zablokowani: <b>'+t.restricted+'</b>';
   renderUsers();
   var dt=new Date((d.generatedAt||0)*1000);
-  document.getElementById('gen').textContent='Dane na żywo ze Stripe · pobrano '+dt.toLocaleTimeString('pl-PL');
+  var ca=d.costAllocation||{},note='';
+  if(ca.source==='stripe-itemized'){
+    note='Koszty per user: realne pozycje ze Stripe'+(ca.reportedThrough?' (raport do '+new Date(ca.reportedThrough*1000).toLocaleDateString('pl-PL')+')':'');
+    if(ca.notYetReported>0.005)note+=' · świeże opłaty (~4 dni) jeszcze nieprzypisane: '+fmt(ca.notYetReported);
+    if(ca.unallocated>0.005)note+=' · bez przypisania: '+fmt(ca.unallocated);
+  }else if(ca.source==='estimate'){
+    note='Koszty per user: na razie szacunek — raport Stripe '+(ca.generating?'generuje się, odśwież za ~1 min':'niedostępny');
+  }
+  document.getElementById('gen').textContent='Dane na żywo ze Stripe · pobrano '+dt.toLocaleTimeString('pl-PL')+(note?' · '+note:'');
 }
 
 function isJunk(u){return (u.status==='restricted'||u.status==='incomplete')&&u.count===0;}
