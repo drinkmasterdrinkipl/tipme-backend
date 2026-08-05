@@ -448,8 +448,15 @@ async function refreshFeeReport() {
 }
 
 // Dane do panelu: konta, weryfikacja, zarobki, prowizje
+// Cache odpowiedzi overview — endpoint robi dziesiątki wywołań Stripe (konta ×
+// płatności × wypłaty), a panel auto-odświeża się co 30s; 60s cache to ucina.
+let overviewCache = { at: 0, body: null };
+
 app.get('/api/admin/overview', adminAuth, async (req, res) => {
   try {
+    if (overviewCache.body && Date.now() - overviewCache.at < 60 * 1000) {
+      return res.json(overviewCache.body);
+    }
     // 1) wszystkie konta połączone (paginacja, cap 1000)
     const accts = [];
     let sa = null;
@@ -617,12 +624,21 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       const poToAcct = {};
       for (const u of users) for (const id of u._payoutIds) poToAcct[id] = u.id;
       const exactGr = {};
+      const partsGr = {}; // acct -> {billing, payout, other} — rozbicie do tooltipa w panelu
+      const addCost = (acct, cat, gr) => {
+        exactGr[acct] = (exactGr[acct] || 0) + gr;
+        const p = (partsGr[acct] = partsGr[acct] || { billing: 0, payout: 0, other: 0 });
+        p[cat] += gr;
+      };
+      const catOf = (it) => it.byType === 'payout' ? 'payout'
+        : /active account/i.test(it.desc) ? 'billing'
+        : /payout/i.test(it.desc) ? 'payout' : 'other';
       let reportTotalGr = 0, unallocatedGr = 0;
       for (const it of feeReport.rows) {
         const gr = it.amountGr;
         reportTotalGr += gr;
-        if (/^acct_/.test(it.by)) { exactGr[it.by] = (exactGr[it.by] || 0) + gr; continue; }
-        if (it.byType === 'payout' && poToAcct[it.by]) { const a = poToAcct[it.by]; exactGr[a] = (exactGr[a] || 0) + gr; continue; }
+        if (/^acct_/.test(it.by)) { addCost(it.by, catOf(it), gr); continue; }
+        if (it.byType === 'payout' && poToAcct[it.by]) { addCost(poToAcct[it.by], 'payout', gr); continue; }
         if (!it.by) {
           // opłata okresowa (np. Active Account Billing) — równy podział na konta
           // Express z wypłatą w oknie aktywności opłaty
@@ -630,7 +646,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
           const active = billed.filter(u => u._payoutTimes.some(t => t >= s && t <= e));
           if (active.length) {
             const per = Math.floor(gr / active.length);
-            active.forEach((u, i) => { exactGr[u.id] = (exactGr[u.id] || 0) + per + (i === 0 ? gr - per * active.length : 0); });
+            active.forEach((u, i) => addCost(u.id, catOf(it), per + (i === 0 ? gr - per * active.length : 0)));
             continue;
           }
         }
@@ -638,8 +654,10 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       }
       for (const u of users) {
         const gr = exactGr[u.id] || 0;
+        const p = partsGr[u.id] || { billing: 0, payout: 0, other: 0 };
         u.cost = gr / 100;
         u.pnl = Math.round(u.commission * 100 - gr) / 100;
+        u.costParts = { billing: p.billing / 100, payout: p.payout / 100, other: p.other / 100 };
       }
       costAllocation = {
         source: 'stripe-itemized',            // realne pozycje z raportu Stripe
@@ -654,12 +672,13 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       const billingRateGr = totalActiveMonths > 0 ? activeBillingGr / totalActiveMonths : 0;
       const payoutScale = totalPayoutEstGr > 0 ? payoutFeeGr / totalPayoutEstGr : 0;
       for (const u of users) {
-        const costUserGr = u.type === 'standard' ? 0
-          : u.activeMonths * billingRateGr
-          + u._payoutFeeEstGr * payoutScale
-          + (billedVolumeGr > 0 ? (u._volumeGr / billedVolumeGr) * volumeBillingGr : 0);
+        const billingPart = u.type === 'standard' ? 0 : u.activeMonths * billingRateGr;
+        const payoutPart = u.type === 'standard' ? 0 : u._payoutFeeEstGr * payoutScale;
+        const otherPart = u.type === 'standard' ? 0 : (billedVolumeGr > 0 ? (u._volumeGr / billedVolumeGr) * volumeBillingGr : 0);
+        const costUserGr = billingPart + payoutPart + otherPart;
         u.cost = Math.round(costUserGr) / 100;
         u.pnl = Math.round(u.commission * 100 - costUserGr) / 100;
+        u.costParts = { billing: Math.round(billingPart) / 100, payout: Math.round(payoutPart) / 100, other: Math.round(otherPart) / 100 };
       }
       costAllocation = { source: 'estimate', generating: feeReport.running, error: feeReport.lastError };
     }
@@ -670,7 +689,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       delete u._payoutTimes;
     }
 
-    res.json({
+    const payload = {
       totals: {
         commission: platCommissionGr / 100, // moja prowizja łącznie (z płatności)
         volume: platVolumeGr / 100,          // suma napiwków (obrót)
@@ -703,7 +722,9 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       })),
       generatedAt: Math.floor(Date.now() / 1000),
       users,
-    });
+    };
+    overviewCache = { at: Date.now(), body: payload };
+    res.json(payload);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -716,12 +737,14 @@ app.delete('/api/admin/account/:id', adminAuth, async (req, res) => {
   if (!/^acct_[A-Za-z0-9]+$/.test(id)) return res.status(400).json({ error: 'Nieprawidłowe ID konta.' });
   try {
     const del = await stripe.accounts.del(id);
+    overviewCache = { at: 0, body: null }; // żeby odświeżony panel nie pokazał konta z cache
     return res.json({ ok: true, deleted: del.deleted === true, method: 'deleted', id });
   } catch (e1) {
     // Konto Standard nie da się usunąć — spróbuj je ROZŁĄCZYĆ przez OAuth (jeśli ustawiony client_id)
     if (process.env.STRIPE_CLIENT_ID) {
       try {
         await stripe.oauth.deauthorize({ client_id: process.env.STRIPE_CLIENT_ID, stripe_user_id: id });
+        overviewCache = { at: 0, body: null };
         return res.json({ ok: true, deleted: true, method: 'disconnected', id });
       } catch (e2) {
         return res.status(400).json({ error: e2.message || e1.message, standard: true });

@@ -46,6 +46,7 @@
       <th>Miesiąc</th><th class="num">Napiwki</th><th class="num">szt.</th>
       <th class="num">Prowizja</th><th class="num">Koszty Stripe</th><th class="num">Wynik</th>
     </tr></thead><tbody id="mtbody"></tbody></table></div>
+    <div class="sub" style="margin-top:6px">Koszt liczy się w miesiącu obciążenia salda — opłatę za aktywne konta z danego miesiąca Stripe pobiera na początku następnego.</div>
 
     <div class="sec-title">Napiwki (obrót użytkowników)</div>
     <div class="cards" id="vol"></div>
@@ -77,7 +78,15 @@ function fmt(n){return (Number(n)||0).toFixed(2).replace('.',',')+' zł';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function plName(s){return s==='verified'?'✅ Zweryfikowany':s==='pending'?'⏳ W trakcie':s==='restricted'?'⛔ Zablokowany':'❌ Niedokończony';}
 function reasonPl(r){if(!r)return '';var m={'requirements.past_due':'brak wymaganych danych','requirements.pending_verification':'dane w weryfikacji','rejected.fraud':'odrzucone: oszustwo','rejected.terms_of_service':'odrzucone: regulamin','rejected.listed':'odrzucone: lista','rejected.other':'odrzucone','listed':'na liście kontrolnej','platform_paused':'wstrzymane przez platformę','under_review':'w przeglądzie','other':'inne'};return m[r]||r;}
-function fail(m){document.getElementById('err').textContent=m;sessionStorage.removeItem('tk');}
+function fail(m,logout){
+  var panelVisible=document.getElementById('panel').style.display==='block';
+  if(logout||!panelVisible){
+    sessionStorage.removeItem('tk');
+    document.getElementById('panel').style.display='none';
+    document.getElementById('login').style.display='block';
+    document.getElementById('err').textContent=m;
+  }else{toast(esc(m),'err');}
+}
 function login(){KEY=document.getElementById('pw').value;document.getElementById('err').textContent='Ładowanie…';load(true);}
 function card(l,v,cls,hint,hi,tip){return '<div class="card'+(hi?' hi':'')+'"><div class="lbl">'+l+(tip?'<span class="info" title="'+esc(tip)+'">?</span>':'')+'</div><div class="val'+(cls?' '+cls:'')+'">'+v+'</div>'+(hint?'<div class="hint">'+hint+'</div>':'')+'</div>';}
 
@@ -95,13 +104,16 @@ function askConfirm(msg){return new Promise(function(resolve){
 });}
 
 function load(manual){
-  if(manual)document.getElementById('err').textContent='Ładowanie…';
+  var btn=document.querySelector('.refresh');
+  if(manual){document.getElementById('err').textContent='Ładowanie…';if(btn){btn.disabled=true;btn.textContent='Ładowanie…';}}
+  function done(){if(btn){btn.disabled=false;btn.textContent='Odśwież';}}
   fetch(APIBASE+'/overview',{headers:{'x-admin-key':KEY}}).then(function(r){
-    if(r.status===401){fail('Błędne hasło');return;}
+    done();
+    if(r.status===401){fail('Błędne hasło',true);return;}
     if(r.status===503){fail('Serwer: brak ADMIN_PASSWORD (ustaw w Render)');return;}
     if(!r.ok){fail('Błąd serwera ('+r.status+')');return;}
     return r.json().then(render);
-  }).catch(function(){fail('Błąd połączenia (backend budzi się ~30s — kliknij ponownie)');});
+  }).catch(function(){done();fail('Błąd połączenia (backend budzi się ~30s — kliknij ponownie)');});
 }
 
 function del(id,label){
@@ -174,12 +186,14 @@ function renderUsers(){
   document.getElementById('showall-lbl').textContent=hidden>0?('pokaż też zablokowane/nieaktywne ('+hidden+')'):'pokaż też zablokowane/nieaktywne';
   var rows='';
   shown.forEach(function(u){
-    var who=esc(u.email||u.name||'—')+(u.name&&u.email?'<div class="mono">'+esc(u.name)+'</div>':'');
+    var since=u.created?new Date(u.created*1000).toLocaleDateString('pl-PL'):'';
+    var who=esc(u.email||u.name||'—')+(u.name&&u.email?'<div class="mono">'+esc(u.name)+'</div>':'')+(since?'<div class="mono">od '+since+'</div>':'');
     var lbl=(u.email||u.name||u.id);
     var canDel=(u.count===0);
+    var cp=u.costParts,ctip=cp?('konto aktywne: '+fmt(cp.billing)+' · wypłaty: '+fmt(cp.payout)+(cp.other>0.005?' · inne: '+fmt(cp.other):'')+' · aktywnych mies.: '+(u.activeMonths||0)):'';
     rows+='<tr><td>'+who+'</td><td><span class="pill '+u.status+'">'+plName(u.status)+'</span>'+(u.reason&&u.status!=='verified'?'<div class="mono" style="margin-top:3px">'+esc(reasonPl(u.reason))+'</div>':'')+'</td>'
       +'<td class="num">'+u.count+'</td><td class="num">'+fmt(u.volume)+'</td><td class="num">'+fmt(u.commission)+'</td>'
-      +'<td class="num">'+(u.cost!=null?fmt(u.cost):'—')+'</td>'
+      +'<td class="num"'+(ctip?' title="'+esc(ctip)+'" style="cursor:help;text-decoration:underline dotted #453a6b"':'')+'>'+(u.cost!=null?fmt(u.cost):'—')+'</td>'
       +'<td class="num" style="color:'+((Number(u.pnl)||0)<0?'#f87171':'#4ade80')+'">'+(u.pnl!=null?fmt(u.pnl):'—')+'</td>'
       +'<td class="hidem mono">'+esc(u.id)+'</td>'
       +'<td>'+(canDel?'<button class="del" data-id="'+esc(u.id)+'" data-lbl="'+esc(lbl)+'">Usuń</button>':'')+'</td></tr>';
