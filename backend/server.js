@@ -340,14 +340,31 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 // ============================================
 const traffic = { pendingByRef: {}, customerId: null, flushing: false };
 const REF_RE = /^[a-z0-9_-]{1,32}$/;
+// Testowe/śmieciowe źródła — ignorowane przy zliczaniu i sprzątane z magazynu przy starcie
+const BLOCKED_REFS = ['test-claude'];
 const dayKeyUtc = (offsetDays = 0) => new Date(Date.now() - offsetDays * 86400000).toISOString().slice(2, 10).replace(/-/g, '');
 
 app.post('/api/track-ref', (req, res) => {
   const ref = String(req.query.ref || 'bezposrednie').toLowerCase();
   const key = REF_RE.test(ref) ? ref : 'inne';
-  traffic.pendingByRef[key] = (traffic.pendingByRef[key] || 0) + 1;
+  if (!BLOCKED_REFS.includes(key)) traffic.pendingByRef[key] = (traffic.pendingByRef[key] || 0) + 1;
   res.status(204).end();
 });
+
+// Jednorazowe sprzątnięcie zablokowanych refów z magazynu (pusta wartość usuwa klucz metadata)
+setTimeout(async () => {
+  try {
+    const id = await trafficCustomer();
+    const c = await stripe.customers.retrieve(id);
+    const dirty = BLOCKED_REFS.filter(r => c.metadata && (('total_' + r) in c.metadata || ('days_' + r) in c.metadata));
+    if (dirty.length) {
+      const unset = {};
+      for (const r of dirty) { unset['total_' + r] = ''; unset['days_' + r] = ''; }
+      await stripe.customers.update(id, { metadata: unset });
+      console.log('🧹 Usunięto testowe refy z licznika:', dirty.join(', '));
+    }
+  } catch (e) { /* pomiń */ }
+}, 15 * 1000);
 
 async function trafficCustomer() {
   if (traffic.customerId) return traffic.customerId;
