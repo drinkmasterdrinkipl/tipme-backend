@@ -52,7 +52,10 @@
     <div class="cards" id="vol"></div>
 
     <div class="sec-title"><span>Użytkownicy</span>
-      <label class="filt"><input type="checkbox" id="showall"/> <span id="showall-lbl">pokaż też zablokowane/nieaktywne</span></label>
+      <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <label class="filt">okres: <select id="umonth" style="background:#1c1636;color:var(--txt);border:1px solid var(--bd);border-radius:8px;padding:4px 8px;font-size:12px"><option value="all">od początku</option></select></label>
+        <label class="filt"><input type="checkbox" id="showall"/> <span id="showall-lbl">pokaż też zablokowane/nieaktywne</span></label>
+      </span>
     </div>
     <div class="statline" id="statline"></div>
     <div class="tblwrap"><table class="tbl"><thead><tr>
@@ -164,6 +167,10 @@ function render(d){
      card('Suma napiwków',fmt(t.volume))+card('Liczba napiwków',String(t.count))
    + card('Średni napiwek',fmt(avg))+card('Użytkownicy',String(t.users),'',t.verified+' zweryfikowanych');
   document.getElementById('statline').innerHTML='✅ Zweryfikowani: <b>'+t.verified+'</b> · ⏳ W trakcie: <b>'+t.pending+'</b> · ❌ Niedokończeni: <b>'+t.incomplete+'</b> · ⛔ Zablokowani: <b>'+t.restricted+'</b>';
+  var us=document.getElementById('umonth'),cur=us.value||'all';
+  var uo='<option value="all">od początku</option>';
+  ms.forEach(function(m){uo+='<option value="'+m.month+'">'+MN[parseInt(m.month.slice(5),10)-1]+' '+m.month.slice(0,4)+'</option>';});
+  us.innerHTML=uo;us.value=cur;if(us.selectedIndex<0)us.value='all';
   renderUsers();
   var dt=new Date((d.generatedAt||0)*1000);
   var ca=d.costAllocation||{},note='';
@@ -184,17 +191,26 @@ function renderUsers(){
   var all=LAST.users,shown=showAll?all:all.filter(function(u){return !isJunk(u);});
   var hidden=all.length-shown.length;
   document.getElementById('showall-lbl').textContent=hidden>0?('pokaż też zablokowane/nieaktywne ('+hidden+')'):'pokaż też zablokowane/nieaktywne';
+  var mv=(document.getElementById('umonth')||{}).value||'all';
+  var exact=LAST.costAllocation&&LAST.costAllocation.source==='stripe-itemized';
+  if(mv!=='all'){shown=shown.slice().sort(function(a,b){
+    var A=(a.byMonth&&a.byMonth[mv])||{},B=(b.byMonth&&b.byMonth[mv])||{};
+    return (B.volume||0)-(A.volume||0)||(B.cost||0)-(A.cost||0);});}
   var rows='';
   shown.forEach(function(u){
+    var st;
+    if(mv==='all'){st={volume:u.volume,count:u.count,commission:u.commission,cost:u.cost,pnl:u.pnl};}
+    else{var b=(u.byMonth&&u.byMonth[mv])||{};var c=(b.cost!=null)?b.cost:(exact?0:null);
+      st={volume:b.volume||0,count:b.count||0,commission:b.commission||0,cost:c,pnl:c!=null?((b.commission||0)-c):null};}
     var since=u.created?new Date(u.created*1000).toLocaleDateString('pl-PL'):'';
     var who=esc(u.email||u.name||'—')+(u.name&&u.email?'<div class="mono">'+esc(u.name)+'</div>':'')+(since?'<div class="mono">od '+since+'</div>':'');
     var lbl=(u.email||u.name||u.id);
     var canDel=(u.count===0);
-    var cp=u.costParts,ctip=cp?('konto aktywne: '+fmt(cp.billing)+' · wypłaty: '+fmt(cp.payout)+(cp.other>0.005?' · inne: '+fmt(cp.other):'')+' · aktywnych mies.: '+(u.activeMonths||0)):'';
+    var cp=u.costParts,ctip=(mv==='all'&&cp)?('konto aktywne: '+fmt(cp.billing)+' · wypłaty: '+fmt(cp.payout)+(cp.other>0.005?' · inne: '+fmt(cp.other):'')+' · aktywnych mies.: '+(u.activeMonths||0)):'';
     rows+='<tr><td>'+who+'</td><td><span class="pill '+u.status+'">'+plName(u.status)+'</span>'+(u.reason&&u.status!=='verified'?'<div class="mono" style="margin-top:3px">'+esc(reasonPl(u.reason))+'</div>':'')+'</td>'
-      +'<td class="num">'+u.count+'</td><td class="num">'+fmt(u.volume)+'</td><td class="num">'+fmt(u.commission)+'</td>'
-      +'<td class="num"'+(ctip?' title="'+esc(ctip)+'" style="cursor:help;text-decoration:underline dotted #453a6b"':'')+'>'+(u.cost!=null?fmt(u.cost):'—')+'</td>'
-      +'<td class="num" style="color:'+((Number(u.pnl)||0)<0?'#f87171':'#4ade80')+'">'+(u.pnl!=null?fmt(u.pnl):'—')+'</td>'
+      +'<td class="num">'+st.count+'</td><td class="num">'+fmt(st.volume)+'</td><td class="num">'+fmt(st.commission)+'</td>'
+      +'<td class="num"'+(ctip?' title="'+esc(ctip)+'" style="cursor:help;text-decoration:underline dotted #453a6b"':'')+'>'+(st.cost!=null?fmt(st.cost):'—')+'</td>'
+      +'<td class="num" style="color:'+((Number(st.pnl)||0)<0?'#f87171':'#4ade80')+'">'+(st.pnl!=null?fmt(st.pnl):'—')+'</td>'
       +'<td class="hidem mono">'+esc(u.id)+'</td>'
       +'<td>'+(canDel?'<button class="del" data-id="'+esc(u.id)+'" data-lbl="'+esc(lbl)+'">Usuń</button>':'')+'</td></tr>';
   });
@@ -203,6 +219,7 @@ function renderUsers(){
 }
 
 document.getElementById('showall').addEventListener('change',renderUsers);
+document.getElementById('umonth').addEventListener('change',renderUsers);
 document.getElementById('autochk').addEventListener('change',function(e){if(timer){clearInterval(timer);timer=null;}if(e.target.checked)timer=setInterval(function(){load(false);},30000);});
 var saved=sessionStorage.getItem('tk');
 if(saved){KEY=saved;load(true);}

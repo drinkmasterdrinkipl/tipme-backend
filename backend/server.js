@@ -410,7 +410,7 @@ async function refreshFeeReport() {
       parameters: {
         interval_start: rt.data_available_start,
         interval_end: rt.data_available_end,
-        columns: ['amount', 'tax', 'currency', 'fee_description', 'incurred_by', 'incurred_by_type', 'activity_start_time', 'activity_end_time', 'product', 'feature_name'],
+        columns: ['amount', 'tax', 'currency', 'fee_description', 'incurred_by', 'incurred_by_type', 'activity_start_time', 'activity_end_time', 'balance_transaction_created', 'incurred_at', 'product', 'feature_name'],
       },
     });
     let r = run;
@@ -425,7 +425,8 @@ async function refreshFeeReport() {
     const col = (n) => head.indexOf(n);
     const iAmt = col('amount'), iTax = col('tax'), iDesc = col('fee_description'),
       iBy = col('incurred_by'), iByT = col('incurred_by_type'),
-      iAs = col('activity_start_time'), iAe = col('activity_end_time');
+      iAs = col('activity_start_time'), iAe = col('activity_end_time'),
+      iBtc = col('balance_transaction_created'), iInc = col('incurred_at');
     feeReport.rows = rows.map((c) => ({
       // amount + tax = pełne obciążenie salda (kwoty w jednostkach głównych waluty)
       amountGr: Math.round(Math.abs(parseFloat(c[iAmt]) || 0) * 100) + Math.round(Math.abs(parseFloat(c[iTax]) || 0) * 100),
@@ -434,6 +435,8 @@ async function refreshFeeReport() {
       byType: (iByT >= 0 && c[iByT]) || '',
       actStart: (iAs >= 0 && c[iAs]) || '',
       actEnd: (iAe >= 0 && c[iAe]) || '',
+      // miesiąc obciążenia salda ('YYYY-MM') — spójny z tabelą rozliczeń miesięcznych
+      btMonth: String((iBtc >= 0 && c[iBtc]) || (iInc >= 0 && c[iInc]) || '').slice(0, 7),
     }));
     feeReport.coveredEndSec = rt.data_available_end;
     feeReport.at = Date.now();
@@ -486,6 +489,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
 
       // Zarobki + prowizja tylko dla kont, które mogą przyjmować płatności
       let volumeGr = 0, commissionGr = 0, count = 0;
+      const acctByMonth = {}; // 'YYYY-MM' -> { volGr, count, comGr, costGr } — do filtra miesiąca w panelu
       if (a.charges_enabled) {
         try {
           let csa = null;
@@ -499,9 +503,14 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
                 volumeGr += c.amount;
                 commissionGr += (c.application_fee_amount || 0);
                 count++;
-                const mr = monthRow(monthOf(c.created));
+                const cm = monthOf(c.created);
+                const mr = monthRow(cm);
                 mr.volGr += c.amount;
                 mr.count++;
+                const um = (acctByMonth[cm] = acctByMonth[cm] || { volGr: 0, count: 0, comGr: 0, costGr: 0 });
+                um.volGr += c.amount;
+                um.count++;
+                um.comGr += (c.application_fee_amount || 0);
               }
             }
             if (!cp.has_more || cp.data.length === 0) break;
@@ -565,6 +574,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         _payoutFeeEstGr: payoutFeeEstGr,
         _payoutIds: payoutIds,
         _payoutTimes: payoutTimes,
+        _byMonth: acctByMonth,
       });
     }
 
@@ -623,12 +633,18 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
     if (feeReport.rows) {
       const poToAcct = {};
       for (const u of users) for (const id of u._payoutIds) poToAcct[id] = u.id;
+      const byId = {};
+      for (const u of users) byId[u.id] = u;
       const exactGr = {};
       const partsGr = {}; // acct -> {billing, payout, other} — rozbicie do tooltipa w panelu
-      const addCost = (acct, cat, gr) => {
+      const addCost = (acct, cat, gr, month) => {
         exactGr[acct] = (exactGr[acct] || 0) + gr;
         const p = (partsGr[acct] = partsGr[acct] || { billing: 0, payout: 0, other: 0 });
         p[cat] += gr;
+        if (month && byId[acct]) {
+          const um = (byId[acct]._byMonth[month] = byId[acct]._byMonth[month] || { volGr: 0, count: 0, comGr: 0, costGr: 0 });
+          um.costGr += gr;
+        }
       };
       const catOf = (it) => it.byType === 'payout' ? 'payout'
         : /active account/i.test(it.desc) ? 'billing'
@@ -637,8 +653,8 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       for (const it of feeReport.rows) {
         const gr = it.amountGr;
         reportTotalGr += gr;
-        if (/^acct_/.test(it.by)) { addCost(it.by, catOf(it), gr); continue; }
-        if (it.byType === 'payout' && poToAcct[it.by]) { addCost(poToAcct[it.by], 'payout', gr); continue; }
+        if (/^acct_/.test(it.by)) { addCost(it.by, catOf(it), gr, it.btMonth); continue; }
+        if (it.byType === 'payout' && poToAcct[it.by]) { addCost(poToAcct[it.by], 'payout', gr, it.btMonth); continue; }
         if (!it.by) {
           // opłata okresowa (np. Active Account Billing) — równy podział na konta
           // Express z wypłatą w oknie aktywności opłaty
@@ -646,7 +662,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
           const active = billed.filter(u => u._payoutTimes.some(t => t >= s && t <= e));
           if (active.length) {
             const per = Math.floor(gr / active.length);
-            active.forEach((u, i) => addCost(u.id, catOf(it), per + (i === 0 ? gr - per * active.length : 0)));
+            active.forEach((u, i) => addCost(u.id, catOf(it), per + (i === 0 ? gr - per * active.length : 0), it.btMonth));
             continue;
           }
         }
@@ -682,7 +698,16 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       }
       costAllocation = { source: 'estimate', generating: feeReport.running, error: feeReport.lastError };
     }
+    // Rozbicie per user na miesiące (do filtra miesiąca w tabeli użytkowników);
+    // koszt per miesiąc znany tylko z raportu (w trybie szacunku: null)
+    const costsExact = !!feeReport.rows;
     for (const u of users) {
+      u.byMonth = {};
+      for (const m of Object.keys(u._byMonth)) {
+        const b = u._byMonth[m];
+        u.byMonth[m] = { volume: b.volGr / 100, count: b.count, commission: b.comGr / 100, cost: costsExact ? b.costGr / 100 : null };
+      }
+      delete u._byMonth;
       delete u._volumeGr;
       delete u._payoutFeeEstGr;
       delete u._payoutIds;
