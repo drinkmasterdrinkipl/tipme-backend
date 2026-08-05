@@ -35,11 +35,17 @@
     <div class="costs" id="costs"></div>
     <div class="explain">
       <div class="ex-title">ℹ️ Co oznaczają te koszty (płacisz je Ty, nie użytkownicy)</div>
-      <div class="ex-row"><b>Active Account Billing</b> — ~9 zł/mc (≈$2) za <b>każde aktywne konto</b>, czyli takie, które w danym miesiącu przyjęło choć 1 napiwek. Płacisz to <b>niezależnie od tego, ile kelner zarobił</b> — nawet za 1 napiwek 5 zł zapłacisz 9 zł. To Twój największy koszt.</div>
+      <div class="ex-row"><b>Active Account Billing</b> — ~9 zł/mc (≈$2) za <b>każde aktywne konto</b>, czyli takie, które w danym miesiącu dostało choć 1 wypłatę na bank (tak to definiuje Stripe). Płacisz to <b>niezależnie od tego, ile kelner zarobił</b> — nawet za 1 napiwek 5 zł zapłacisz 9 zł. To Twój największy koszt.</div>
       <div class="ex-row"><b>Payout Fee</b> — opłata za <b>każdą wypłatę</b> na konto bankowe: 1,35 zł + 0,25% od kwoty. Wypłaty ustawione tygodniowo (nie dzienne), żeby było ich mniej.</div>
       <div class="ex-row"><b>Account Volume Billing</b> — 0,25% od obrotu. Grosze, bez znaczenia.</div>
       <div class="ex-be">📈 <b>Próg opłacalności:</b> jedno aktywne konto kosztuje Cię ~14 zł/mc (konto ~9 zł + wypłaty ~5 zł). Przy 7% prowizji wychodzi na zero dopiero przy <b>~200 zł napiwków miesięcznie na kelnera</b>. Poniżej tego — dopłacasz. Model zaczyna zarabiać przy większym wolumenie na kelnera lub większej liczbie realnie używających apki.</div>
     </div>
+
+    <div class="sec-title">Rozliczenia miesięczne</div>
+    <div class="tblwrap"><table class="tbl" style="min-width:520px"><thead><tr>
+      <th>Miesiąc</th><th class="num">Napiwki</th><th class="num">szt.</th>
+      <th class="num">Prowizja</th><th class="num">Koszty Stripe</th><th class="num">Wynik</th>
+    </tr></thead><tbody id="mtbody"></tbody></table></div>
 
     <div class="sec-title">Napiwki (obrót użytkowników)</div>
     <div class="cards" id="vol"></div>
@@ -128,6 +134,19 @@ function render(d){
     ch+='<div class="row"><span class="c" style="color:#e9e6f5;font-weight:700">Razem koszty</span><span class="amt" style="font-weight:700">− '+fmt(p.totalCosts||0)+'</span></div>';
     document.getElementById('costs').innerHTML=ch;document.getElementById('costs').style.display='block';}
   else{document.getElementById('costs').style.display='none';}
+  var MN=['styczeń','luty','marzec','kwiecień','maj','czerwiec','lipiec','sierpień','wrzesień','październik','listopad','grudzień'];
+  var mrows='';var ms=d.monthly||[];var sumV=0,sumC=0,sumRev=0,sumCost=0,sumNet=0;
+  ms.forEach(function(m){
+    sumV+=m.volume;sumC+=m.count;sumRev+=m.revenue;sumCost+=m.costs;sumNet+=m.net;
+    var lbl=MN[parseInt(m.month.slice(5),10)-1]+' '+m.month.slice(0,4);
+    mrows+='<tr><td>'+lbl+'</td><td class="num">'+fmt(m.volume)+'</td><td class="num">'+m.count+'</td>'
+      +'<td class="num">'+fmt(m.revenue)+'</td><td class="num" style="color:var(--red)">− '+fmt(m.costs)+'</td>'
+      +'<td class="num" style="color:var(--'+(m.net<0?'red':'grn')+')">'+fmt(m.net)+'</td></tr>';
+  });
+  if(mrows){mrows+='<tr style="font-weight:700"><td>Razem</td><td class="num">'+fmt(sumV)+'</td><td class="num">'+sumC+'</td>'
+    +'<td class="num">'+fmt(sumRev)+'</td><td class="num" style="color:var(--red)">− '+fmt(sumCost)+'</td>'
+    +'<td class="num" style="color:var(--'+(sumNet<0?'red':'grn')+')">'+fmt(sumNet)+'</td></tr>';}
+  document.getElementById('mtbody').innerHTML=mrows||'<tr><td colspan="6" style="color:#9a91b8">Brak danych — odśwież po aktualizacji backendu</td></tr>';
   var avg=t.count?(t.volume/t.count):0;
   document.getElementById('vol').innerHTML=
      card('Suma napiwków',fmt(t.volume))+card('Liczba napiwków',String(t.count))

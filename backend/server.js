@@ -462,6 +462,9 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
 
     const users = [];
     let platVolumeGr = 0, platCommissionGr = 0, platCount = 0;
+    const monthly = {}; // 'YYYY-MM' -> { volGr, count, revGr, refGr, costGr }
+    const monthOf = (sec) => new Date(sec * 1000).toISOString().slice(0, 7);
+    const monthRow = (m) => (monthly[m] = monthly[m] || { volGr: 0, count: 0, revGr: 0, refGr: 0, costGr: 0 });
 
     for (const a of accts) {
       const rq = a.requirements || {};
@@ -489,6 +492,9 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
                 volumeGr += c.amount;
                 commissionGr += (c.application_fee_amount || 0);
                 count++;
+                const mr = monthRow(monthOf(c.created));
+                mr.volGr += c.amount;
+                mr.count++;
               }
             }
             if (!cp.has_more || cp.data.length === 0) break;
@@ -573,11 +579,12 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       for (let i = 0; i < 15; i++) { // cap 1500 transakcji salda
         const bt = await stripe.balanceTransactions.list(bsa ? { limit: 100, starting_after: bsa } : { limit: 100 });
         for (const t of bt.data) {
-          if (t.type === 'application_fee') revenueGr += t.net;
-          else if (t.type === 'application_fee_refund') refundGr += Math.abs(t.amount);
+          if (t.type === 'application_fee') { revenueGr += t.net; monthRow(monthOf(t.created)).revGr += t.net; }
+          else if (t.type === 'application_fee_refund') { refundGr += Math.abs(t.amount); monthRow(monthOf(t.created)).refGr += Math.abs(t.amount); }
           else if (t.type === 'stripe_fee' || (t.amount < 0 && t.reporting_category === 'fee')) {
             const key = t.description || 'Opłata Stripe';
             costMap[key] = (costMap[key] || 0) + Math.abs(t.amount);
+            monthRow(monthOf(t.created)).costGr += Math.abs(t.amount);
             const kl = key.toLowerCase();
             if (kl.includes('active account')) activeBillingGr += Math.abs(t.amount);
             else if (kl.includes('payout')) payoutFeeGr += Math.abs(t.amount);
@@ -684,6 +691,16 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         netProfit: netProfitGr / 100,  // zysk = prowizje − zwroty − koszty Stripe
       },
       costAllocation,
+      // Rozliczenie per miesiąc (z dat transakcji salda i płatności; koszt liczy się
+      // w miesiącu obciążenia — np. opłata za aktywne konta z kwietnia schodzi w maju)
+      monthly: Object.keys(monthly).sort().reverse().map((m) => ({
+        month: m,
+        volume: monthly[m].volGr / 100,
+        count: monthly[m].count,
+        revenue: monthly[m].revGr / 100,
+        costs: monthly[m].costGr / 100,
+        net: (monthly[m].revGr - monthly[m].refGr - monthly[m].costGr) / 100,
+      })),
       generatedAt: Math.floor(Date.now() / 1000),
       users,
     });
