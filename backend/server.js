@@ -284,6 +284,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
     <table class="tbl"><thead><tr>
       <th>Użytkownik</th><th>Status</th>
       <th class="num">Napiwki</th><th class="num">Zarobił</th><th class="num">Moja prowizja</th>
+      <th class="num">Koszt</th><th class="num">Wynik</th>
       <th class="hidem">Konto Stripe</th>
     </tr></thead><tbody id="tbody"></tbody></table>
   </div>
@@ -314,9 +315,10 @@ function render(d){
   var rows='';
   d.users.forEach(function(u){
     var who=esc(u.email||u.name||'—')+(u.name&&u.email?'<div class="mono">'+esc(u.name)+'</div>':'');
-    rows+='<tr><td>'+who+'</td><td><span class="pill '+u.status+'">'+plName(u.status)+'</span></td><td class="num">'+u.count+'</td><td class="num">'+fmt(u.volume)+'</td><td class="num">'+fmt(u.commission)+'</td><td class="hidem mono">'+esc(u.id)+'</td></tr>';
+    var pnl=Number(u.pnl)||0;
+    rows+='<tr><td>'+who+'</td><td><span class="pill '+u.status+'">'+plName(u.status)+'</span></td><td class="num">'+u.count+'</td><td class="num">'+fmt(u.volume)+'</td><td class="num">'+fmt(u.commission)+'</td><td class="num">'+fmt(u.cost)+'</td><td class="num" style="color:var(--'+(pnl<0?'red':'grn')+')">'+fmt(pnl)+'</td><td class="hidem mono">'+esc(u.id)+'</td></tr>';
   });
-  document.getElementById('tbody').innerHTML=rows||'<tr><td colspan="6" style="color:#9a91b8">Brak kont</td></tr>';
+  document.getElementById('tbody').innerHTML=rows||'<tr><td colspan="8" style="color:#9a91b8">Brak kont</td></tr>';
   var dt=new Date((d.generatedAt||0)*1000);
   document.getElementById('gen').textContent='Dane na żywo ze Stripe · '+dt.toLocaleString('pl-PL');
 }
@@ -378,6 +380,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
 
       // Zarobki + prowizja tylko dla kont, które mogą przyjmować płatności
       let volumeGr = 0, commissionGr = 0, count = 0;
+      const monthsActive = new Set(); // miesiące z ≥1 napiwkiem — za te Stripe nalicza Active Account Billing
       if (a.charges_enabled) {
         try {
           let csa = null;
@@ -391,12 +394,35 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
                 volumeGr += c.amount;
                 commissionGr += (c.application_fee_amount || 0);
                 count++;
+                monthsActive.add(new Date(c.created * 1000).toISOString().slice(0, 7));
               }
             }
             if (!cp.has_more || cp.data.length === 0) break;
             csa = cp.data[cp.data.length - 1].id;
           }
         } catch (e) { /* konto może odmówić dostępu — pomiń */ }
+      }
+
+      // Opłaty za wypłaty tego konta (płaci platforma: 1,35 zł + 0,25% od kwoty).
+      // Wyliczone regułą cennika; niżej skalowane do realnej sumy "Payout Fee" z salda.
+      let payoutFeeEstGr = 0;
+      if (a.payouts_enabled && volumeGr > 0) {
+        try {
+          let psa = null;
+          for (let j = 0; j < 3; j++) { // cap 300 wypłat / konto
+            const pp = await stripe.payouts.list(
+              psa ? { limit: 100, starting_after: psa } : { limit: 100 },
+              { stripeAccount: a.id }
+            );
+            for (const p of pp.data) {
+              if (p.status !== 'canceled' && p.status !== 'failed') {
+                payoutFeeEstGr += 135 + Math.round(p.amount * 0.0025);
+              }
+            }
+            if (!pp.has_more || pp.data.length === 0) break;
+            psa = pp.data[pp.data.length - 1].id;
+          }
+        } catch (e) { /* pomiń */ }
       }
 
       platVolumeGr += volumeGr;
@@ -422,6 +448,9 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         volume: volumeGr / 100,
         commission: commissionGr / 100,
         count,
+        activeMonths: monthsActive.size,
+        _volumeGr: volumeGr,
+        _payoutFeeEstGr: payoutFeeEstGr,
       });
     }
 
@@ -437,6 +466,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
 
     let revenueGr = 0, refundGr = 0;
     const costMap = {};
+    let activeBillingGr = 0, payoutFeeGr = 0, volumeBillingGr = 0;
     try {
       let bsa = null;
       for (let i = 0; i < 15; i++) { // cap 1500 transakcji salda
@@ -447,12 +477,35 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
           else if (t.type === 'stripe_fee' || (t.amount < 0 && t.reporting_category === 'fee')) {
             const key = t.description || 'Opłata Stripe';
             costMap[key] = (costMap[key] || 0) + Math.abs(t.amount);
+            const kl = key.toLowerCase();
+            if (kl.includes('active account')) activeBillingGr += Math.abs(t.amount);
+            else if (kl.includes('payout')) payoutFeeGr += Math.abs(t.amount);
+            else if (kl.includes('volume')) volumeBillingGr += Math.abs(t.amount);
           }
         }
         if (!bt.has_more || bt.data.length === 0) break;
         bsa = bt.data[bt.data.length - 1].id;
       }
     } catch (e) { /* pomiń */ }
+
+    // === KOSZT PER USER — alokacja realnych kosztów Stripe na konta ===
+    // Active Account Billing: płaska stawka × liczba aktywnych miesięcy konta
+    // (stawka = realna suma ze Stripe ÷ suma aktywnych konto-miesięcy, więc całość sumuje się co do grosza).
+    // Payout Fee: reguła 1,35 zł + 0,25% per wypłata, przeskalowana do realnej sumy ze Stripe.
+    // Volume Billing: proporcjonalnie do obrotu konta.
+    const totalActiveMonths = users.reduce((s, u) => s + u.activeMonths, 0);
+    const totalPayoutEstGr = users.reduce((s, u) => s + u._payoutFeeEstGr, 0);
+    const billingRateGr = totalActiveMonths > 0 ? activeBillingGr / totalActiveMonths : 0;
+    const payoutScale = totalPayoutEstGr > 0 ? payoutFeeGr / totalPayoutEstGr : 0;
+    for (const u of users) {
+      const costUserGr = u.activeMonths * billingRateGr
+        + u._payoutFeeEstGr * payoutScale
+        + (platVolumeGr > 0 ? (u._volumeGr / platVolumeGr) * volumeBillingGr : 0);
+      u.cost = Math.round(costUserGr) / 100;
+      u.pnl = Math.round(u.commission * 100 - costUserGr) / 100;
+      delete u._volumeGr;
+      delete u._payoutFeeEstGr;
+    }
 
     const costs = Object.entries(costMap)
       .map(([label, gr]) => ({ label, amount: gr / 100 }))
