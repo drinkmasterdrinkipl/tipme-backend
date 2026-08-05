@@ -493,14 +493,20 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
     // (stawka = realna suma ze Stripe ÷ suma aktywnych konto-miesięcy, więc całość sumuje się co do grosza).
     // Payout Fee: reguła 1,35 zł + 0,25% per wypłata, przeskalowana do realnej sumy ze Stripe.
     // Volume Billing: proporcjonalnie do obrotu konta.
-    const totalActiveMonths = users.reduce((s, u) => s + u.activeMonths, 0);
-    const totalPayoutEstGr = users.reduce((s, u) => s + u._payoutFeeEstGr, 0);
+    // Konta Standard nie kosztują platformy: Active Account Billing, Payout Fee i Volume
+    // Billing Stripe nalicza tylko za Express/Custom (Standard płaci swoje opłaty sam,
+    // z własnego salda) — dlatego Standard nie bierze udziału w alokacji, koszt = 0.
+    const billed = users.filter(u => u.type !== 'standard');
+    const totalActiveMonths = billed.reduce((s, u) => s + u.activeMonths, 0);
+    const totalPayoutEstGr = billed.reduce((s, u) => s + u._payoutFeeEstGr, 0);
+    const billedVolumeGr = billed.reduce((s, u) => s + u._volumeGr, 0);
     const billingRateGr = totalActiveMonths > 0 ? activeBillingGr / totalActiveMonths : 0;
     const payoutScale = totalPayoutEstGr > 0 ? payoutFeeGr / totalPayoutEstGr : 0;
     for (const u of users) {
-      const costUserGr = u.activeMonths * billingRateGr
+      const costUserGr = u.type === 'standard' ? 0
+        : u.activeMonths * billingRateGr
         + u._payoutFeeEstGr * payoutScale
-        + (platVolumeGr > 0 ? (u._volumeGr / platVolumeGr) * volumeBillingGr : 0);
+        + (billedVolumeGr > 0 ? (u._volumeGr / billedVolumeGr) * volumeBillingGr : 0);
       u.cost = Math.round(costUserGr) / 100;
       u.pnl = Math.round(u.commission * 100 - costUserGr) / 100;
       delete u._volumeGr;
