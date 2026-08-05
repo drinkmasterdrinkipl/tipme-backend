@@ -48,6 +48,13 @@
     </tr></thead><tbody id="mtbody"></tbody></table></div>
     <div class="sub" style="margin-top:6px">Koszt liczy się w miesiącu obciążenia salda — opłatę za aktywne konta z danego miesiąca Stripe pobiera na początku następnego.</div>
 
+    <div id="traffic-sec" style="display:none">
+      <div class="sec-title">Wejścia na tipforme.app (wg źródła)</div>
+      <div class="tblwrap"><table class="tbl" style="min-width:420px"><thead><tr>
+        <th>Źródło</th><th class="num">Dziś</th><th class="num">7 dni</th><th class="num">30 dni</th><th class="num">Łącznie</th>
+      </tr></thead><tbody id="ttbody"></tbody></table></div>
+    </div>
+
     <div class="sec-title">Napiwki (obrót użytkowników)</div>
     <div class="cards" id="vol"></div>
 
@@ -162,6 +169,16 @@ function render(d){
     +'<td class="num">'+fmt(sumRev)+'</td><td class="num" style="color:var(--red)">− '+fmt(sumCost)+'</td>'
     +'<td class="num" style="color:var(--'+(sumNet<0?'red':'grn')+')">'+fmt(sumNet)+'</td></tr>';}
   document.getElementById('mtbody').innerHTML=mrows||'<tr><td colspan="6" style="color:#9a91b8">Brak danych — odśwież po aktualizacji backendu</td></tr>';
+  var tr=d.traffic||[];
+  if(tr.length){
+    var trh='';
+    tr.forEach(function(r){
+      var lbl=r.ref==='bezposrednie'?'bezpośrednie':r.ref==='drinki'?'drinki.pl':r.ref;
+      trh+='<tr><td>'+esc(lbl)+'</td><td class="num">'+r.today+'</td><td class="num">'+r.last7+'</td><td class="num">'+r.last30+'</td><td class="num">'+r.total+'</td></tr>';
+    });
+    document.getElementById('ttbody').innerHTML=trh;
+    document.getElementById('traffic-sec').style.display='block';
+  }else{document.getElementById('traffic-sec').style.display='none';}
   var avg=t.count?(t.volume/t.count):0;
   document.getElementById('vol').innerHTML=
      card('Suma napiwków',fmt(t.volume))+card('Liczba napiwków',String(t.count))

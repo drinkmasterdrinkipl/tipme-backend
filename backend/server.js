@@ -332,6 +332,64 @@ document.getElementById('pw').addEventListener('keydown',function(e){if(e.key===
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // ============================================
+// LICZNIK WEJŚĆ NA tipforme.app wg źródła (?ref=drinki itd.)
+// Backend nie ma bazy — liczniki trzymane trwale w metadata dedykowanego
+// obiektu Customer w Stripe (oznaczonego metadata.kv='tipforme-traffic').
+// Inkrementy zbierane w pamięci i zapisywane zbiorczo co 60 s.
+// Format metadata: total_<ref>='123'; days_<ref>='250805:3,250806:7' (ostatnie ~40 dni)
+// ============================================
+const traffic = { pendingByRef: {}, customerId: null, flushing: false };
+const REF_RE = /^[a-z0-9_-]{1,32}$/;
+const dayKeyUtc = (offsetDays = 0) => new Date(Date.now() - offsetDays * 86400000).toISOString().slice(2, 10).replace(/-/g, '');
+
+app.post('/api/track-ref', (req, res) => {
+  const ref = String(req.query.ref || 'bezposrednie').toLowerCase();
+  const key = REF_RE.test(ref) ? ref : 'inne';
+  traffic.pendingByRef[key] = (traffic.pendingByRef[key] || 0) + 1;
+  res.status(204).end();
+});
+
+async function trafficCustomer() {
+  if (traffic.customerId) return traffic.customerId;
+  const found = await stripe.customers.search({ query: "metadata['kv']:'tipforme-traffic'", limit: 1 });
+  if (found.data.length) { traffic.customerId = found.data[0].id; return traffic.customerId; }
+  const c = await stripe.customers.create({
+    description: 'Licznik wejść tipforme.app (obiekt techniczny, nie klient)',
+    metadata: { kv: 'tipforme-traffic' },
+  });
+  traffic.customerId = c.id;
+  return c.id;
+}
+
+async function flushTraffic() {
+  if (traffic.flushing || !Object.keys(traffic.pendingByRef).length) return;
+  traffic.flushing = true;
+  const pending = traffic.pendingByRef;
+  traffic.pendingByRef = {};
+  try {
+    const id = await trafficCustomer();
+    const c = await stripe.customers.retrieve(id);
+    const md = { ...(c.metadata || {}) };
+    const today = dayKeyUtc();
+    for (const [ref, n] of Object.entries(pending)) {
+      md['total_' + ref] = String((parseInt(md['total_' + ref], 10) || 0) + n);
+      const days = (md['days_' + ref] || '').split(',').filter(Boolean);
+      const last = days[days.length - 1];
+      if (last && last.startsWith(today + ':')) days[days.length - 1] = today + ':' + ((parseInt(last.split(':')[1], 10) || 0) + n);
+      else days.push(today + ':' + n);
+      md['days_' + ref] = days.slice(-40).join(','); // limit metadata: 500 znaków na wartość
+    }
+    await stripe.customers.update(id, { metadata: md });
+  } catch (e) {
+    // nieudany zapis — oddaj inkrementy do puli, spróbujemy za minutę
+    for (const [ref, n] of Object.entries(pending)) traffic.pendingByRef[ref] = (traffic.pendingByRef[ref] || 0) + n;
+  } finally {
+    traffic.flushing = false;
+  }
+}
+setInterval(flushTraffic, 60 * 1000);
+
+// ============================================
 // PANEL ADMINA (tylko właściciel) — PRZED strażnikiem API_SECRET
 // Chroniony osobnym hasłem ADMIN_PASSWORD (ustaw w Render → Environment).
 // Serwowany z tego samego origina co API → brak problemów z CORS.
@@ -714,6 +772,30 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
       delete u._payoutTimes;
     }
 
+    // Wejścia na stronę wg źródła — z licznika w Stripe + niespłukane inkrementy z pamięci
+    let trafficSummary = null;
+    try {
+      const tc = await stripe.customers.retrieve(await trafficCustomer());
+      const md = tc.metadata || {};
+      const today = dayKeyUtc();
+      const keys7 = new Set(Array.from({ length: 7 }, (_, i) => dayKeyUtc(i)));
+      const keys30 = new Set(Array.from({ length: 30 }, (_, i) => dayKeyUtc(i)));
+      trafficSummary = Object.keys(md).filter(k => k.startsWith('total_')).map(k => {
+        const ref = k.slice(6);
+        const days = (md['days_' + ref] || '').split(',').filter(Boolean).map(s => s.split(':'));
+        const sum = (set) => days.reduce((a, [d, n]) => a + (set.has(d) ? (parseInt(n, 10) || 0) : 0), 0);
+        const pend = traffic.pendingByRef[ref] || 0;
+        return {
+          ref,
+          today: sum(new Set([today])) + pend,
+          last7: sum(keys7) + pend,
+          last30: sum(keys30) + pend,
+          total: (parseInt(md[k], 10) || 0) + pend,
+        };
+      }).sort((a, b) => b.total - a.total);
+      if (!trafficSummary.length) trafficSummary = null;
+    } catch (e) { /* pomiń — sekcja ruchu jest opcjonalna */ }
+
     const payload = {
       totals: {
         commission: platCommissionGr / 100, // moja prowizja łącznie (z płatności)
@@ -734,6 +816,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         totalCosts: totalCostsGr / 100,
         netProfit: netProfitGr / 100,  // zysk = prowizje − zwroty − koszty Stripe
       },
+      traffic: trafficSummary,   // wejścia na tipforme.app wg ?ref= (null gdy brak danych)
       costAllocation,
       // Rozliczenie per miesiąc (z dat transakcji salda i płatności; koszt liczy się
       // w miesiącu obciążenia — np. opłata za aktywne konta z kwietnia schodzi w maju)
