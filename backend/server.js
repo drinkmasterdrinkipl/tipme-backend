@@ -633,6 +633,7 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
         id: a.id,
         email: a.email || (a.individual && a.individual.email) || '',
         name,
+        phone: (a.individual && a.individual.phone) || (a.business_profile && a.business_profile.support_phone) || '',
         status,
         chargesEnabled: !!a.charges_enabled,
         payoutsEnabled: !!a.payouts_enabled,

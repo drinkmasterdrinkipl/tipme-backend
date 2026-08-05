@@ -220,7 +220,9 @@ function renderUsers(){
     else{var b=(u.byMonth&&u.byMonth[mv])||{};var c=(b.cost!=null)?b.cost:(exact?0:null);
       st={volume:b.volume||0,count:b.count||0,commission:b.commission||0,cost:c,pnl:c!=null?((b.commission||0)-c):null};}
     var since=u.created?new Date(u.created*1000).toLocaleDateString('pl-PL'):'';
-    var who=esc(u.email||u.name||'—')+(u.name&&u.email?'<div class="mono">'+esc(u.name)+'</div>':'')+(since?'<div class="mono">od '+since+'</div>':'');
+    var who=esc(u.email||u.name||'—')+(u.name&&u.email?'<div class="mono">'+esc(u.name)+'</div>':'')
+      +(u.phone?'<div class="mono">📞 '+esc(u.phone)+'</div>':'')
+      +(since?'<div class="mono">od '+since+'</div>':'');
     var lbl=(u.email||u.name||u.id);
     var canDel=(u.count===0);
     var cp=u.costParts,ctip=(mv==='all'&&cp)?('konto aktywne: '+fmt(cp.billing)+' · wypłaty: '+fmt(cp.payout)+(cp.other>0.005?' · inne: '+fmt(cp.other):'')+' · aktywnych mies.: '+(u.activeMonths||0)):'';
