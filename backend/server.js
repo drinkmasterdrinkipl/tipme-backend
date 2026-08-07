@@ -1020,8 +1020,22 @@ app.post('/api/create-connected-account', async (req, res) => {
     // Sprawdź czy konto z tym emailem już istnieje
     const found = await findStripeAccountByEmail(email);
     if (found) {
-      // Niedokończona rejestracja (brak details_submitted) — pozwól wznowić
+      // Niedokończona rejestracja (brak details_submitted)
       if (!found.details_submitted) {
+        // Retry po timeoucie apki (rejestracja trwa kilka sekund, apka czeka 15 s):
+        // to samo hasło = ten sam człowiek → wznów rejestrację świeżym linkiem
+        // zamiast straszyć błędem "konto już istnieje"
+        const hash = found.metadata && found.metadata.password_hash;
+        if (hash && await bcrypt.compare(password, hash)) {
+          const resumeLink = await stripe.accountLinks.create({
+            account: found.id,
+            refresh_url: 'https://tipforme.app/stripe/success.html',
+            return_url: 'https://tipforme.app/stripe/success.html',
+            type: 'account_onboarding',
+            collection_options: { fields: 'currently_due' },
+          });
+          return res.json({ accountId: found.id, onboardingUrl: resumeLink.url, resumed: true });
+        }
         return res.status(409).json({
           error: 'Masz niedokończoną rejestrację. Zaloguj się aby kontynuować.',
           incompleteRegistration: true,
@@ -1033,7 +1047,9 @@ app.post('/api/create-connected-account', async (req, res) => {
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    // cost 10 zamiast 12: ~4x szybszy hash (rejestracja przestaje ocierać się
+    // o 15-sekundowy timeout apki); istniejące hashe 12 dalej działają przy logowaniu
+    const passwordHash = await bcrypt.hash(password, 10);
 
     const normalizedEmail = email.toLowerCase().trim();
     const displayName = [firstName, lastName].filter(Boolean).join(' ').trim() || normalizedEmail.split('@')[0];
