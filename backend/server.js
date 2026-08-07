@@ -18,24 +18,65 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme-set-JWT_SECRET-on-render';
 
-// Szuka konta Stripe po emailu z obsługą paginacji (> 100 kont)
-// Zwraca WSZYSTKIE konta z danym emailem
+// ============================================
+// INDEKS KONT POŁĄCZONYCH (email -> [id]) trzymany w pamięci.
+// stripe.accounts.list potrafi trwać ~10 s, a logowanie i rejestracja muszą
+// zmieścić się w 15-sekundowym timeoucie aplikacji — dlatego pełny skan robimy
+// w tle co 5 minut, a na żądaniach tylko szybkie retrieve po ID.
+// Nowo utworzone konta dopisywane do indeksu od ręki.
+// ============================================
+const acctIndex = { byEmail: new Map(), at: 0, refreshing: null };
+
+function indexAccount(a) {
+  const key = (a.email || '').toLowerCase();
+  if (!key) return;
+  const arr = acctIndex.byEmail.get(key) || [];
+  if (!arr.includes(a.id)) arr.push(a.id);
+  acctIndex.byEmail.set(key, arr);
+}
+
+async function refreshAcctIndex() {
+  if (acctIndex.refreshing) return acctIndex.refreshing;
+  acctIndex.refreshing = (async () => {
+    try {
+      const map = new Map();
+      let startingAfter;
+      while (true) {
+        const batch = await stripe.accounts.list({
+          limit: 100,
+          ...(startingAfter && { starting_after: startingAfter }),
+        });
+        for (const a of batch.data) {
+          const key = (a.email || '').toLowerCase();
+          if (!key) continue;
+          const arr = map.get(key) || [];
+          arr.push(a.id);
+          map.set(key, arr);
+        }
+        if (!batch.has_more || batch.data.length === 0) break;
+        startingAfter = batch.data[batch.data.length - 1].id;
+      }
+      acctIndex.byEmail = map;
+      acctIndex.at = Date.now();
+    } catch (e) {
+      console.error('Odświeżenie indeksu kont nieudane:', e.message);
+    } finally {
+      acctIndex.refreshing = null;
+    }
+  })();
+  return acctIndex.refreshing;
+}
+setTimeout(refreshAcctIndex, 3000);           // rozgrzewka zaraz po starcie
+setInterval(refreshAcctIndex, 5 * 60 * 1000); // odświeżanie w tle
+
+// Zwraca WSZYSTKIE konta z danym emailem — świeże obiekty (retrieve po ID),
+// bo status onboardingu potrafi zmienić się w minutach
 async function findAllStripeAccountsByEmail(email) {
   const normalizedEmail = email.toLowerCase().trim();
-  const results = [];
-  let startingAfter = undefined;
-  while (true) {
-    const batch = await stripe.accounts.list({
-      limit: 100,
-      ...(startingAfter && { starting_after: startingAfter }),
-    });
-    for (const a of batch.data) {
-      if (a.email === normalizedEmail) results.push(a);
-    }
-    if (!batch.has_more) break;
-    startingAfter = batch.data[batch.data.length - 1].id;
-  }
-  return results;
+  if (!acctIndex.at) await refreshAcctIndex(); // zimny start — jednorazowy pełny skan
+  const ids = acctIndex.byEmail.get(normalizedEmail) || [];
+  const accounts = await Promise.all(ids.map((id) => stripe.accounts.retrieve(id).catch(() => null)));
+  return accounts.filter(Boolean);
 }
 
 // Zachowane dla kompatybilności — zwraca pierwsze konto (używane przy rejestracji)
@@ -1083,6 +1124,7 @@ app.post('/api/create-connected-account', async (req, res) => {
     }
 
     const account = await stripe.accounts.create(accountData);
+    indexAccount(account); // od ręki do indeksu — retry po timeoucie musi je znaleźć
 
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
