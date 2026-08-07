@@ -27,7 +27,7 @@
       <div class="head-actions">
         <label class="auto"><input type="checkbox" id="autochk"/> auto-odświeżanie 30s</label>
         <button class="refresh" onclick="exportProwizje()">⬇ Ewidencja prowizji (CSV)</button>
-        <button class="refresh" onclick="load(true)">Odśwież</button>
+        <button class="refresh" id="btn-refresh" onclick="load(true)">Odśwież</button>
       </div>
     </div>
 
@@ -115,7 +115,7 @@ function askConfirm(msg){return new Promise(function(resolve){
 });}
 
 function load(manual){
-  var btn=document.querySelector('.refresh');
+  var btn=document.getElementById('btn-refresh');
   if(manual){document.getElementById('err').textContent='Ładowanie…';if(btn){btn.disabled=true;btn.textContent='Ładowanie…';}}
   function done(){if(btn){btn.disabled=false;btn.textContent='Odśwież';}}
   fetch(APIBASE+'/overview',{headers:{'x-admin-key':KEY}}).then(function(r){
