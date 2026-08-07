@@ -858,6 +858,46 @@ app.get('/api/admin/overview', adminAuth, async (req, res) => {
 
 // Usuwanie konta połączonego (Express) — działa dla kont bez salda.
 // Konta Standard mogą odmówić (Stripe zwróci błąd — pokazujemy go w panelu).
+// Ewidencja przychodów z prowizji — CSV z realnych application fees ze Stripe.
+// Każdy wiersz = jedna prowizja (przychód platformy); zwrócone prowizje pominięte.
+// Format pod Excel PL: BOM + średniki + przecinek dziesiętny.
+app.get('/api/admin/prowizje.csv', adminAuth, async (req, res) => {
+  try {
+    const acctEmail = {};
+    if (overviewCache.body) for (const u of overviewCache.body.users || []) acctEmail[u.id] = u.email || u.name || '';
+    const rows = [['data', 'kwota_prowizji_pln', 'uzytkownik', 'konto_stripe', 'id_oplaty', 'id_platnosci']];
+    let totalGr = 0;
+    let sa = null;
+    for (let i = 0; i < 50; i++) { // cap 5000 prowizji
+      const fees = await stripe.applicationFees.list(sa ? { limit: 100, starting_after: sa } : { limit: 100 });
+      for (const f of fees.data) {
+        if (f.refunded) continue;
+        const netGr = f.amount - (f.amount_refunded || 0);
+        if (netGr <= 0) continue;
+        totalGr += netGr;
+        rows.push([
+          new Date(f.created * 1000).toISOString().slice(0, 10),
+          (netGr / 100).toFixed(2).replace('.', ','),
+          acctEmail[f.account] || '',
+          f.account,
+          f.id,
+          typeof f.charge === 'string' ? f.charge : '',
+        ]);
+      }
+      if (!fees.has_more || fees.data.length === 0) break;
+      sa = fees.data[fees.data.length - 1].id;
+    }
+    rows.push([]);
+    rows.push(['RAZEM', (totalGr / 100).toFixed(2).replace('.', ','), '', '', '', '']);
+    const csv = '﻿' + rows.map(r => r.join(';')).join('\r\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="tipforme-ewidencja-prowizji.csv"');
+    res.send(csv);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.delete('/api/admin/account/:id', adminAuth, async (req, res) => {
   const id = String(req.params.id || '');
   if (!/^acct_[A-Za-z0-9]+$/.test(id)) return res.status(400).json({ error: 'Nieprawidłowe ID konta.' });
@@ -1528,6 +1568,8 @@ app.post('/api/create-payment-intent', authenticateToken, async (req, res) => {
         application_fee_amount: applicationFee,
         description: 'Tip For Me - napiwek',
         statement_descriptor_suffix: 'Tip For Me',
+        // znacznik do rozdziału przychodów w ewidencji (ryczałt: przychód platformy = prowizja)
+        metadata: { source: 'tipforme-platform' },
       },
       {
         stripeAccount: stripeAccountId,

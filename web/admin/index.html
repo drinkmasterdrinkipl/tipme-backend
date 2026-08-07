@@ -26,6 +26,7 @@
       </div>
       <div class="head-actions">
         <label class="auto"><input type="checkbox" id="autochk"/> auto-odświeżanie 30s</label>
+        <button class="refresh" onclick="exportProwizje()">⬇ Ewidencja prowizji (CSV)</button>
         <button class="refresh" onclick="load(true)">Odśwież</button>
       </div>
     </div>
@@ -239,6 +240,19 @@ function renderUsers(){
 
 document.getElementById('showall').addEventListener('change',renderUsers);
 document.getElementById('umonth').addEventListener('change',renderUsers);
+function exportProwizje(){
+  toast('Przygotowuję ewidencję…');
+  fetch(APIBASE+'/prowizje.csv',{headers:{'x-admin-key':KEY}}).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.blob();
+  }).then(function(b){
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download='tipforme-ewidencja-prowizji.csv';
+    document.body.appendChild(a);a.click();a.remove();
+    toast('Ewidencja pobrana ✅','ok');
+  }).catch(function(e){toast('Błąd eksportu: '+esc(e.message),'err');});
+}
 document.getElementById('autochk').addEventListener('change',function(e){if(timer){clearInterval(timer);timer=null;}if(e.target.checked)timer=setInterval(function(){load(false);},30000);});
 var saved=sessionStorage.getItem('tk');
 if(saved){KEY=saved;load(true);}
