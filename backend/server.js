@@ -138,6 +138,16 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+// Nagłówki bezpieczeństwa (bez zależności — lekki odpowiednik helmet)
+app.disable('x-powered-by'); // nie ujawniaj, że to Express
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY'); // API nie jest do osadzania w ramkach
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
 // CORS — tylko znane originy
 const allowedOrigins = ['https://tipforme.app', 'https://tipme-backend-2rcv.onrender.com'];
 app.use(cors({
@@ -1492,10 +1502,14 @@ app.get('/api/account-status/:accountId', async (req, res) => {
       });
     }
 
-    // Token tylko jeśli konto aktywne I ma ustawione hasło przez naszą aplikację.
-    // Zapobiega uzyskaniu tokenu przez kogoś kto zna tylko acct_ ID.
+    // Token wydajemy TYLKO dla świeżo utworzonych kont (< 48h) — endpoint jest
+    // odpytywany bez uwierzytelnienia (polling w OnboardingScreen po rejestracji),
+    // więc bez tego ograniczenia ktoś znający cudze acct_ ID + klucz API mógłby
+    // uzyskać token do cudzego konta. Zalogowany user i tak dostaje token z
+    // /api/auth/login; tu token służy wyłącznie dokończeniu świeżej rejestracji.
     const hasPassword = !!account.metadata?.password_hash;
-    const token = (account.charges_enabled && hasPassword)
+    const isFresh = account.created && (Date.now() / 1000 - account.created) < 48 * 3600;
+    const token = (account.charges_enabled && hasPassword && isFresh)
       ? createToken(account.id, account.email)
       : null;
 
