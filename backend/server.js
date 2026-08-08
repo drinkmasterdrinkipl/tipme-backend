@@ -91,18 +91,31 @@ async function sendCompletionReminders() {
     for (const id of ids) {
       try {
         const a = await stripe.accounts.retrieve(id);
-        const ageH = (now - (a.created || now)) / 3600;
+        const md = a.metadata || {};
         const email = a.email || '';
-        if (a.details_submitted) continue;                 // już dokończył
-        if (ageH < 24 || ageH > 24 * 14) continue;          // okno 24h–14 dni
-        if (!email || /@(example|test)\./i.test(email)) continue;
-        if (a.metadata && a.metadata.reminder_sent) continue; // już wysłano
+        if (a.details_submitted) continue;                        // już dokończył
+        if (!email || /@(example|test)\./i.test(email)) continue;  // brak/test email
+        if (md.reminders_optout) continue;                        // wypisał się z przypomnień
+        const ageH = (now - (a.created || now)) / 3600;
+        if (ageH > 24 * 30) continue;                             // starsze niż 30 dni — zostaw w spokoju
+
+        // Maks. 2 maile: #1 po dniu, #2 po tygodniu (ostatni)
+        let stage = 0;
+        if (!md.reminder1_sent && ageH >= 24) stage = 1;
+        else if (md.reminder1_sent && !md.reminder2_sent && ageH >= 24 * 7) stage = 2;
+        if (!stage) continue;
+
         const name = (a.individual && a.individual.first_name) || '';
         const hi = name ? `Cześć ${name}!` : 'Cześć!';
+        const unsub = `https://tipme-backend-2rcv.onrender.com/api/rezygnacja?t=${jwt.sign({ a: id, p: 'unsub' }, JWT_SECRET)}`;
+        const last = stage === 2
+          ? `<p>To ostatnie przypomnienie od nas — jeśli nie dokończysz teraz, nie będziemy więcej pisać.</p>` : '';
         await mailer.sendMail({
           from: `"Tip For Me" <${process.env.SMTP_USER}>`,
           to: email,
-          subject: 'Dokończ zakładanie konta Tip For Me — zostało kilka kroków',
+          subject: stage === 2
+            ? 'Ostatnie przypomnienie — dokończ konto Tip For Me'
+            : 'Dokończ zakładanie konta Tip For Me — zostało kilka kroków',
           html:
             `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;color:#1a1a1a;line-height:1.6">` +
             `<h2 style="color:#7c3aed">${hi}</h2>` +
@@ -111,10 +124,12 @@ async function sendCompletionReminders() {
             `<p style="text-align:center;margin:26px 0"><a href="https://tipforme.app/jak-zalozyc-konto" style="background:#7c3aed;color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:700">📖 Zobacz poradnik</a></p>` +
             `<p>Aby dokończyć: otwórz aplikację → <b>„Mam już konto — zaloguj się"</b> (email i hasło z rejestracji) → aplikacja przeniesie Cię tam, gdzie skończyłeś/aś.</p>` +
             `<p>Będziesz potrzebować: dokumentu tożsamości, adresu i numeru konta bankowego.</p>` +
-            `<p style="color:#888;font-size:13px">Jeśli to nie Ty zakładałeś/aś konto albo nie chcesz kontynuować — po prostu zignoruj tę wiadomość.</p>` +
-            `<p style="color:#888;font-size:13px">Zespół Tip For Me · tipforme.app</p></div>`,
+            last +
+            `<hr style="border:none;border-top:1px solid #eee;margin:22px 0"/>` +
+            `<p style="color:#999;font-size:12px">Jeśli to nie Ty zakładałeś/aś konto lub nie chcesz otrzymywać przypomnień, <a href="${unsub}" style="color:#7c3aed">kliknij tutaj, aby zrezygnować</a>.</p>` +
+            `<p style="color:#999;font-size:12px">Zespół Tip For Me · tipforme.app</p></div>`,
         });
-        await stripe.accounts.update(id, { metadata: { ...(a.metadata || {}), reminder_sent: String(Math.floor(now)) } });
+        await stripe.accounts.update(id, { metadata: { ...md, [`reminder${stage}_sent`]: String(Math.floor(now)) } });
         sent++;
         await new Promise((r) => setTimeout(r, 1500)); // łagodnie dla SMTP
       } catch (e) { /* pojedyncze konto — pomiń */ }
@@ -439,6 +454,24 @@ document.getElementById('pw').addEventListener('keydown',function(e){if(e.key===
 
 // Health check przed API key — UptimeRobot nie wysyła X-Api-Key
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+// Rezygnacja z przypomnień — link z maila (podpisany token, bez logowania)
+app.get('/api/rezygnacja', async (req, res) => {
+  const page = (title, msg) => `<!doctype html><html lang="pl"><head><meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/><title>${title}</title></head>
+    <body style="font-family:-apple-system,Segoe UI,sans-serif;background:#0e0a1a;color:#ece9f5;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center">
+    <div style="max-width:420px;padding:30px"><h2 style="color:#c4b5fd">${title}</h2><p style="color:#a79fc0;line-height:1.6">${msg}</p>
+    <p style="margin-top:24px"><a href="https://tipforme.app" style="color:#7c3aed">tipforme.app</a></p></div></body></html>`;
+  try {
+    const payload = jwt.verify(String(req.query.t || ''), JWT_SECRET);
+    if (payload.p !== 'unsub' || !payload.a) throw new Error('bad token');
+    const a = await stripe.accounts.retrieve(payload.a);
+    await stripe.accounts.update(a.id, { metadata: { ...(a.metadata || {}), reminders_optout: '1' } });
+    res.send(page('Zrezygnowano ✓', 'Nie będziemy już wysyłać przypomnień o dokończeniu rejestracji na ten adres. Jeśli zmienisz zdanie, po prostu dokończ zakładanie konta w aplikacji.'));
+  } catch (e) {
+    res.status(400).send(page('Link nieprawidłowy', 'Ten link do rezygnacji jest nieprawidłowy lub wygasł. W razie pytań napisz na hello@tipforme.app.'));
+  }
+});
 
 // ============================================
 // LICZNIK WEJŚĆ NA tipforme.app wg źródła (?ref=drinki itd.)
