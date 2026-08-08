@@ -21,6 +21,15 @@
   .prep ul{list-style:none}
   .prep li{padding:7px 0 7px 28px;position:relative;font-size:15px}
   .prep li::before{content:"✓";position:absolute;left:0;color:#34d399;font-weight:800}
+  .trust{background:linear-gradient(160deg,#1a1330,#150f26);border:1px solid var(--bd);border-radius:16px;padding:22px 22px;margin:0 0 18px}
+  .trust h2{font-size:16px;font-weight:800;margin-bottom:8px;letter-spacing:-.01em}
+  .trust p{color:#cfc7e4;font-size:14px;line-height:1.6}
+  .trust p b{color:#e9e2ff}
+  .trust .rows{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+  .trust .r{display:flex;gap:12px;align-items:flex-start}
+  .trust .r svg{flex:0 0 22px;width:22px;height:22px;color:var(--lav);margin-top:1px}
+  .trust .r b{display:block;font-size:14px;color:#ece9f5;font-weight:700}
+  .trust .r span{font-size:13px;color:var(--mut);line-height:1.5}
   .step{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:22px 22px 24px;margin-bottom:20px}
   .step .no{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--pur);color:#fff;font-weight:800;font-size:15px;margin-bottom:12px}
   .step h3{font-size:18px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
@@ -43,6 +52,25 @@
   <h1>Jak założyć konto — krok po kroku</h1>
   <p>Weryfikację prowadzi Stripe (nasz operator płatności). Zajmuje kilka minut. Poniżej pokazujemy, co wpisać w każdym oknie.</p>
 </header>
+
+<div class="trust">
+  <h2>🔒 Czy to bezpieczne? Tak.</h2>
+  <p>Twoje dane weryfikuje <b>Stripe</b> — międzynarodowa platforma finansowa, z której korzystają miliony firm w ponad 40 krajach: od małych lokali po globalne marki. To licencjonowana instytucja płatnicza działająca w Unii Europejskiej pod nadzorem finansowym.</p>
+  <div class="rows">
+    <div class="r">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <div><b>Weryfikacja jak w banku</b><span>Dowód i PESEL to standardowy, wymagany prawem sposób potwierdzenia tożsamości — dokładnie taki sam jak przy zakładaniu konta bankowego.</span></div>
+    </div>
+    <div class="r">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4-3 7-7 8-4-1-7-4-7-8V7z"/><path d="M9 12l2 2 4-4"/></svg>
+      <div><b>Twoje dane są chronione</b><span>Dokument i PESEL trafiają bezpośrednio do Stripe i są szyfrowane. Właściciel aplikacji ich nie widzi ani nie przechowuje.</span></div>
+    </div>
+    <div class="r">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 4l9 5.5"/><path d="M5 10v7M9.5 10v7M14.5 10v7M19 10v7"/><path d="M3 19.5h18"/></svg>
+      <div><b>Pieniądze prosto na Twoje konto</b><span>Napiwki trafiają na Twój rachunek bankowy — Stripe rozlicza i wypłaca je automatycznie, co tydzień.</span></div>
+    </div>
+  </div>
+</div>
 
 <div class="prep">
   <h2>📋 Przygotuj przed startem</h2>
