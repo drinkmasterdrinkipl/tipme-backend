@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pl"><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex,follow"/>
+<title>Jak założyć konto — Tip For Me</title>
+<link href="/fonts/inter.css" rel="stylesheet"/>
+<style>
+  :root{--pur:#7c3aed;--lav:#c4b5fd;--ink:#17121f;--bg:#0e0a1a;--card:#181228;--bd:#2a2140;--mut:#a79fc0}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:#ece9f5;line-height:1.6;padding:0 18px 60px}
+  .wrap{max-width:640px;margin:0 auto}
+  header{text-align:center;padding:44px 0 28px}
+  .brand{display:inline-flex;align-items:center;gap:10px;margin-bottom:22px}
+  .brand img{width:34px;height:34px}
+  .brand b{font-size:17px}
+  h1{font-size:27px;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+  header p{color:var(--mut);margin-top:10px;font-size:15px}
+  .prep{background:linear-gradient(180deg,#1c1435,#181228);border:1px solid var(--bd);border-radius:16px;padding:20px 22px;margin:10px 0 30px}
+  .prep h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--lav);margin-bottom:12px}
+  .prep ul{list-style:none}
+  .prep li{padding:7px 0 7px 28px;position:relative;font-size:15px}
+  .prep li::before{content:"✓";position:absolute;left:0;color:#34d399;font-weight:800}
+  .step{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:22px 22px 24px;margin-bottom:20px}
+  .step .no{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--pur);color:#fff;font-weight:800;font-size:15px;margin-bottom:12px}
+  .step h3{font-size:18px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
+  .step p{color:#d6d1e6;font-size:15px}
+  .step .tip{margin-top:12px;background:rgba(124,58,237,.12);border-left:3px solid var(--pur);border-radius:0 8px 8px 0;padding:10px 14px;font-size:14px;color:#e7e2f5}
+  .shot{margin-top:16px;border:1px dashed var(--bd);border-radius:12px;overflow:hidden;background:#100c1e}
+  .shot img{display:block;width:100%;height:auto}
+  .shot .ph{display:flex;align-items:center;justify-content:center;min-height:150px;color:#6b6486;font-size:13px;text-align:center;padding:20px}
+  .cta{text-align:center;margin:36px 0 10px}
+  .cta a{display:inline-block;background:var(--pur);color:#fff;text-decoration:none;padding:15px 34px;border-radius:12px;font-weight:700;font-size:16px}
+  .cta a:hover{background:#6b21c9}
+  .help{text-align:center;color:var(--mut);font-size:14px;margin-top:22px}
+  .help a{color:var(--lav)}
+  footer{text-align:center;color:#6b6486;font-size:13px;margin-top:40px;padding-top:22px;border-top:1px solid var(--bd)}
+  footer a{color:var(--mut)}
+</style></head><body><div class="wrap">
+
+<header>
+  <div class="brand"><img src="/logo.png" alt=""/><b>Tip For Me</b></div>
+  <h1>Jak założyć konto — krok po kroku</h1>
+  <p>Weryfikację prowadzi Stripe (nasz operator płatności). Zajmuje kilka minut. Poniżej pokazujemy, co wpisać w każdym oknie.</p>
+</header>
+
+<div class="prep">
+  <h2>📋 Przygotuj przed startem</h2>
+  <ul>
+    <li>Dokument tożsamości (dowód lub paszport)</li>
+    <li>Telefon do odbioru kodu SMS</li>
+    <li>Twój adres zamieszkania</li>
+    <li>Numer konta bankowego (IBAN — „PL" + numer)</li>
+    <li>PESEL — przyspiesza weryfikację (opcjonalny)</li>
+  </ul>
+</div>
+
+<div class="step">
+  <span class="no">1</span>
+  <h3>Otwórz dokończenie rejestracji</h3>
+  <p>W aplikacji wybierz <b>„Mam już konto — zaloguj się"</b>, podaj email i hasło z rejestracji. Aplikacja przeniesie Cię prosto do formularza Stripe, tam gdzie skończyłeś.</p>
+  <div class="shot"><div class="ph">[ zrzut ekranu 1 — ekran logowania w aplikacji ]</div></div>
+</div>
+
+<div class="step">
+  <span class="no">2</span>
+  <h3>Numer telefonu i kod SMS</h3>
+  <p>Wpisz swój numer telefonu. Stripe wyśle SMS z kodem — przepisz go, aby potwierdzić.</p>
+  <div class="tip">💡 Podaj ten sam email co w aplikacji, jeśli Stripe o niego zapyta.</div>
+  <div class="shot"><div class="ph">[ zrzut ekranu 2 — okno telefonu / kodu SMS ]</div></div>
+</div>
+
+<div class="step">
+  <span class="no">3</span>
+  <h3>Dane osobowe i adres</h3>
+  <p>Imię i nazwisko są już wpisane. Uzupełnij adres zamieszkania oraz datę urodzenia. Jeśli masz PESEL — podaj go, przyspieszy to weryfikację.</p>
+  <div class="shot"><div class="ph">[ zrzut ekranu 3 — okno danych osobowych / adresu ]</div></div>
+</div>
+
+<div class="step">
+  <span class="no">4</span>
+  <h3>Numer konta bankowego</h3>
+  <p>Podaj numer konta, na które mają trafiać napiwki. W polu „IBAN" wpisz <b>PL</b> i zaraz po nim swój numer konta (26 cyfr), bez spacji.</p>
+  <div class="tip">💡 Przykład: PL61109010140000071219812874</div>
+  <div class="shot"><div class="ph">[ zrzut ekranu 4 — okno numeru konta / IBAN ]</div></div>
+</div>
+
+<div class="step">
+  <span class="no">5</span>
+  <h3>Dokument tożsamości i selfie</h3>
+  <p>Zrób zdjęcie dowodu (obu stron) i selfie — to standardowa weryfikacja tożsamości wymagana przez prawo. Zezwól aplikacji na dostęp do aparatu, gdy o to poprosi.</p>
+  <div class="shot"><div class="ph">[ zrzut ekranu 5 — okno zdjęcia dokumentu / selfie ]</div></div>
+</div>
+
+<div class="step">
+  <span class="no">6</span>
+  <h3>Gotowe!</h3>
+  <p>Po zatwierdzeniu przez Stripe (zwykle od razu, czasem do kilku godzin) konto jest aktywne i możesz przyjmować pierwszy napiwek. Aplikacja sama wykryje, że weryfikacja się powiodła.</p>
+</div>
+
+<div class="cta"><a href="tipforme://open">Otwórz aplikację</a></div>
+<p class="help">Coś nie działa? Napisz do nas: <a href="mailto:hello@tipforme.app">hello@tipforme.app</a></p>
+
+<footer>
+  <p>© 2026 Tip For Me · <a href="/regulamin.html">Regulamin</a> · <a href="/polityka-prywatnosci.html">Polityka prywatności</a></p>
+</footer>
+
+</div></body></html>

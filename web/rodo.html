@@ -1,19 +1,21 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Informacja RODO — Tip For Me</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link href="/fonts/inter.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css?v=5"/>
+  <link rel="icon" type="image/png" sizes="32x32" href="/xfavicon-32.png,qv=3.pagespeed.ic._y2jhTavRN.png"/>
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png?v=3"/>
+  <link rel="icon" href="/favicon.ico?v=3" sizes="any"/>
+  <link rel="apple-touch-icon" href="/xapple-touch-icon.png,qv=3.pagespeed.ic.HLqgP3pQL0.png"/>
 </head>
 <body>
   <nav class="nav">
     <div class="nav-inner">
       <a href="index.html" class="logo">
-        <span class="logo-icon">⬡</span>
+        <img src="logo.png" class="logo-icon-img" alt="Tip For Me"/>
         <span class="logo-text">Tip For Me</span>
       </a>
       <div class="nav-links">
@@ -28,7 +30,7 @@
     <div class="container">
       <div class="section-label">DOKUMENT PRAWNY</div>
       <h1>Informacja o przetwarzaniu danych osobowych</h1>
-      <p>Zgodnie z art. 13 RODO (Rozporządzenia Parlamentu Europejskiego i Rady (UE) 2016/679) · Ostatnia aktualizacja: 3 kwietnia 2026 r.</p>
+      <p>Zgodnie z art. 13 RODO (Rozporządzenia Parlamentu Europejskiego i Rady (UE) 2016/679) · Ostatnia aktualizacja: 15 lipca 2026 r.</p>
     </div>
   </div>
 
@@ -37,7 +39,7 @@
     <p>Zgodnie z art. 13 Rozporządzenia Parlamentu Europejskiego i Rady (UE) 2016/679 z dnia 27 kwietnia 2016 r. w sprawie ochrony osób fizycznych w związku z przetwarzaniem danych osobowych i w sprawie swobodnego przepływu takich danych oraz uchylenia dyrektywy 95/46/WE (ogólne rozporządzenie o ochronie danych, dalej: <strong>RODO</strong>), informujemy:</p>
 
     <h2>1. Administrator Danych Osobowych</h2>
-    <p>Administratorem Pani/Pana danych osobowych jest Operator Aplikacji <strong>Tip For Me</strong>.</p>
+    <p>Administratorem Pani/Pana danych osobowych jest <strong>Tip For Me Adrian Chwaściński</strong> — Adrian Chwaściński prowadzący jednoosobową działalność gospodarczą, NIP 6582004736, REGON 544609441.</p>
     <p>Kontakt z Administratorem: <a href="mailto:hello@tipforme.app">hello@tipforme.app</a></p>
 
     <h2>2. Cel i podstawa prawna przetwarzania</h2>
@@ -53,8 +55,10 @@
       <li>Dane identyfikacyjne: adres e-mail</li>
       <li>Dane transakcyjne: kwoty napiwków, daty transakcji, zamaskowane dane karty (marka, ostatnie 4 cyfry)</li>
       <li>Dane techniczne: identyfikator konta Stripe Connect (przechowywany lokalnie na urządzeniu)</li>
+      <li>Dane lokalizacyjne: przybliżona lokalizacja urządzenia — przetwarzana wyłącznie w związku z realizacją płatności zbliżeniowych (wymóg techniczny Stripe Terminal / Tap to Pay), nieprzechowywana przez Administratora i niewykorzystywana do śledzenia.</li>
     </ul>
-    <p>Dane weryfikacyjne tożsamości (imię, nazwisko, dowód osobisty, IBAN) są przetwarzane wyłącznie przez <strong>Stripe</strong> i nie są przechowywane przez Administratora.</p>
+    <p>Dane weryfikacyjne tożsamości (dowód osobisty, data urodzenia, numer rachunku/IBAN) są przetwarzane wyłącznie przez <strong>Stripe</strong> i nie są przechowywane przez Administratora.</p>
+    <p>Administrator, za pośrednictwem interfejsu (API) Stripe, ma natomiast <strong>wgląd</strong> do następujących danych Użytkownika: imię i nazwisko, adres e-mail, numer telefonu, identyfikator i status konta Stripe oraz dane transakcyjne (kwoty, daty). Dane te są odczytywane na bieżąco i wykorzystywane wyłącznie w celach obsługi konta, wsparcia, przeciwdziałania nadużyciom oraz wypełnienia obowiązków prawnych i podatkowych (art. 6 ust. 1 lit. b, c i f RODO). Administrator nie prowadzi ich odrębnej bazy danych.</p>
 
     <h2>4. Odbiorcy danych</h2>
     <p>Dane osobowe mogą być przekazywane następującym kategoriom odbiorców:</p>

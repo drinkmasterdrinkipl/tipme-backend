@@ -69,6 +69,60 @@ async function refreshAcctIndex() {
 setTimeout(refreshAcctIndex, 3000);           // rozgrzewka zaraz po starcie
 setInterval(refreshAcctIndex, 5 * 60 * 1000); // odświeżanie w tle
 
+// ============================================
+// PRZYPOMNIENIE O DOKOŃCZENIU REJESTRACJI
+// Raz dziennie: konta założone 24h–14 dni temu, które nie ukończyły weryfikacji
+// Stripe (details_submitted=false), dostają jednorazowego maila z linkiem do
+// poradnika. Znacznik metadata.reminder_sent zapobiega ponownej wysyłce
+// (backend bez bazy — flaga trzymana w koncie Stripe). Mail transakcyjny
+// (dokończenie usługi, o którą user sam poprosił) — nie wymaga zgody marketingowej.
+// ============================================
+async function sendCompletionReminders() {
+  if (!process.env.SMTP_USER) return;
+  try {
+    if (!acctIndex.at) await refreshAcctIndex();
+    const ids = [...new Set([...acctIndex.byEmail.values()].flat())];
+    const now = Date.now() / 1000;
+    let sent = 0;
+    for (const id of ids) {
+      try {
+        const a = await stripe.accounts.retrieve(id);
+        const ageH = (now - (a.created || now)) / 3600;
+        const email = a.email || '';
+        if (a.details_submitted) continue;                 // już dokończył
+        if (ageH < 24 || ageH > 24 * 14) continue;          // okno 24h–14 dni
+        if (!email || /@(example|test)\./i.test(email)) continue;
+        if (a.metadata && a.metadata.reminder_sent) continue; // już wysłano
+        const name = (a.individual && a.individual.first_name) || '';
+        const hi = name ? `Cześć ${name}!` : 'Cześć!';
+        await mailer.sendMail({
+          from: `"Tip For Me" <${process.env.SMTP_USER}>`,
+          to: email,
+          subject: 'Dokończ zakładanie konta Tip For Me — zostało kilka kroków',
+          html:
+            `<div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;margin:auto;color:#1a1a1a;line-height:1.6">` +
+            `<h2 style="color:#7c3aed">${hi}</h2>` +
+            `<p>Zaczęłeś/aś zakładać konto w aplikacji <b>Tip For Me</b>, ale weryfikacja w Stripe nie została dokończona — dlatego nie możesz jeszcze przyjmować napiwków.</p>` +
+            `<p>To zajmie tylko <b>kilka minut</b>. Przygotowaliśmy poradnik krok po kroku ze zrzutami ekranu, co wpisać w każdym oknie:</p>` +
+            `<p style="text-align:center;margin:26px 0"><a href="https://tipforme.app/jak-zalozyc-konto.html" style="background:#7c3aed;color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:700">📖 Zobacz poradnik</a></p>` +
+            `<p>Aby dokończyć: otwórz aplikację → <b>„Mam już konto — zaloguj się"</b> (email i hasło z rejestracji) → aplikacja przeniesie Cię tam, gdzie skończyłeś/aś.</p>` +
+            `<p>Będziesz potrzebować: dokumentu tożsamości, adresu i numeru konta bankowego.</p>` +
+            `<p style="color:#888;font-size:13px">Jeśli to nie Ty zakładałeś/aś konto albo nie chcesz kontynuować — po prostu zignoruj tę wiadomość.</p>` +
+            `<p style="color:#888;font-size:13px">Zespół Tip For Me · tipforme.app</p></div>`,
+        });
+        await stripe.accounts.update(id, { metadata: { ...(a.metadata || {}), reminder_sent: String(Math.floor(now)) } });
+        sent++;
+        await new Promise((r) => setTimeout(r, 1500)); // łagodnie dla SMTP
+      } catch (e) { /* pojedyncze konto — pomiń */ }
+    }
+    if (sent) console.log(`📧 Wysłano ${sent} przypomnień o dokończeniu rejestracji`);
+  } catch (e) {
+    console.error('Przypomnienia o rejestracji — błąd:', e.message);
+  }
+}
+setTimeout(sendCompletionReminders, 90 * 1000);       // pierwszy przebieg ~1,5 min po starcie
+setInterval(sendCompletionReminders, 24 * 3600 * 1000); // raz na dobę
+
 // Zwraca WSZYSTKIE konta z danym emailem — świeże obiekty (retrieve po ID),
 // bo status onboardingu potrafi zmienić się w minutach
 async function findAllStripeAccountsByEmail(email) {

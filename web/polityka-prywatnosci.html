@@ -1,19 +1,21 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Polityka Prywatności — Tip For Me</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link href="/fonts/inter.css" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css?v=5"/>
+  <link rel="icon" type="image/png" sizes="32x32" href="/xfavicon-32.png,qv=3.pagespeed.ic._y2jhTavRN.png"/>
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png?v=3"/>
+  <link rel="icon" href="/favicon.ico?v=3" sizes="any"/>
+  <link rel="apple-touch-icon" href="/xapple-touch-icon.png,qv=3.pagespeed.ic.HLqgP3pQL0.png"/>
 </head>
 <body>
   <nav class="nav">
     <div class="nav-inner">
       <a href="index.html" class="logo">
-        <span class="logo-icon">⬡</span>
+        <img src="logo.png" class="logo-icon-img" alt="Tip For Me"/>
         <span class="logo-text">Tip For Me</span>
       </a>
       <div class="nav-links">
@@ -28,7 +30,7 @@
     <div class="container">
       <div class="section-label">DOKUMENT PRAWNY</div>
       <h1>Polityka Prywatności</h1>
-      <p>Ostatnia aktualizacja: 3 kwietnia 2026 r.</p>
+      <p>Ostatnia aktualizacja: 15 lipca 2026 r.</p>
     </div>
   </div>
 
@@ -37,7 +39,7 @@
     <p>Niniejsza Polityka Prywatności opisuje, jakie dane zbiera i przetwarza Aplikacja <strong>Tip For Me</strong>, w jaki sposób są one wykorzystywane oraz jakie prawa przysługują Użytkownikom w związku z przetwarzaniem ich danych osobowych.</p>
 
     <h2>1. Administrator danych</h2>
-    <p>Administratorem danych osobowych jest Operator Aplikacji Tip For Me. Kontakt w sprawach związanych z ochroną danych: <a href="mailto:hello@tipforme.app">hello@tipforme.app</a>.</p>
+    <p>Administratorem danych osobowych jest Adrian Chwaściński prowadzący działalność gospodarczą pod firmą „Tip For Me Adrian Chwaściński", NIP 6582004736, REGON 544609441. Kontakt w sprawach związanych z ochroną danych: <a href="mailto:hello@tipforme.app">hello@tipforme.app</a>.</p>
 
     <h2>2. Jakie dane zbieramy</h2>
 
@@ -46,7 +48,9 @@
       <li>Adres e-mail</li>
       <li>Dane wymagane przez Stripe do weryfikacji tożsamości (imię, nazwisko, data urodzenia, adres, dokument tożsamości, numer konta bankowego)</li>
     </ul>
-    <p>Dane weryfikacyjne są przekazywane bezpośrednio do Stripe i <strong>nie są przechowywane przez Aplikację</strong>.</p>
+    <p>Dane weryfikacyjne (dokument tożsamości, data urodzenia, numer konta bankowego) są przekazywane bezpośrednio do Stripe i <strong>nie są przechowywane w bazie Aplikacji</strong>.</p>
+    <h3>Dane, do których Operator ma wgląd przez Stripe</h3>
+    <p>Za pośrednictwem interfejsu (API) Stripe Operator ma wgląd — na potrzeby obsługi konta, wsparcia Użytkownika, przeciwdziałania nadużyciom oraz realizacji obowiązków prawnych i podatkowych — do następujących danych Użytkownika: <strong>imię i nazwisko, adres e-mail, numer telefonu, status i identyfikator konta Stripe oraz dane transakcyjne</strong> (kwoty i daty). Dane te są odczytywane na bieżąco ze Stripe i prezentowane w panelu administracyjnym Operatora; Operator nie prowadzi ich odrębnej bazy danych.</p>
 
     <h3>Dane transakcyjne</h3>
     <ul>
@@ -61,7 +65,11 @@
       <li>Model urządzenia i wersja systemu iOS (wyłącznie dla celów wsparcia technicznego)</li>
       <li>Logi błędów (jeśli Użytkownik zgłosi problem)</li>
     </ul>
-    <p>Aplikacja <strong>nie zbiera danych lokalizacyjnych, kontaktów, zdjęć ani żadnych innych danych z urządzenia</strong>.</p>
+    <h3>Dane lokalizacyjne</h3>
+    <ul>
+      <li>Przybliżona lokalizacja urządzenia (coarse location) — uzyskiwana wyłącznie w związku z przetwarzaniem płatności zbliżeniowych, jako wymóg techniczny i przeciwdziałania nadużyciom technologii Stripe Terminal / Tap to Pay. Lokalizacja <strong>nie jest wykorzystywana do śledzenia użytkownika ani do celów marketingowych</strong> i nie jest przechowywana przez Operatora.</li>
+    </ul>
+    <p>Aplikacja <strong>nie zbiera kontaktów ani nie przegląda galerii zdjęć</strong>. Dostęp do aparatu i zdjęć wykorzystywany jest wyłącznie podczas weryfikacji tożsamości (zdjęcie dokumentu i selfie), a dane te przekazywane są <strong>bezpośrednio do Stripe</strong> i nie są przechowywane przez Aplikację.</p>
 
     <h2>3. Cel i podstawa przetwarzania danych</h2>
     <ul>
