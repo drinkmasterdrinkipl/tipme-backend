@@ -78,6 +78,10 @@ setInterval(refreshAcctIndex, 5 * 60 * 1000); // odświeżanie w tle
 // (dokończenie usługi, o którą user sam poprosił) — nie wymaga zgody marketingowej.
 // ============================================
 async function sendCompletionReminders() {
+  // Wyłącznik bezpieczeństwa — wysyłka rusza DOPIERO po ustawieniu
+  // REMINDERS_ENABLED=true na Render. Domyślnie NIC nie wychodzi (poradnik nie
+  // ma jeszcze zrzutów ekranu). Włączyć w przyszłym tygodniu.
+  if (process.env.REMINDERS_ENABLED !== 'true') return;
   if (!process.env.SMTP_USER) return;
   try {
     if (!acctIndex.at) await refreshAcctIndex();
