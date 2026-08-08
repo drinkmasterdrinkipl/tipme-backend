@@ -108,7 +108,7 @@ async function sendCompletionReminders() {
             `<h2 style="color:#7c3aed">${hi}</h2>` +
             `<p>Zaczęłeś/aś zakładać konto w aplikacji <b>Tip For Me</b>, ale weryfikacja w Stripe nie została dokończona — dlatego nie możesz jeszcze przyjmować napiwków.</p>` +
             `<p>To zajmie tylko <b>kilka minut</b>. Przygotowaliśmy poradnik krok po kroku ze zrzutami ekranu, co wpisać w każdym oknie:</p>` +
-            `<p style="text-align:center;margin:26px 0"><a href="https://tipforme.app/jak-zalozyc-konto.html" style="background:#7c3aed;color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:700">📖 Zobacz poradnik</a></p>` +
+            `<p style="text-align:center;margin:26px 0"><a href="https://tipforme.app/jak-zalozyc-konto" style="background:#7c3aed;color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:700">📖 Zobacz poradnik</a></p>` +
             `<p>Aby dokończyć: otwórz aplikację → <b>„Mam już konto — zaloguj się"</b> (email i hasło z rejestracji) → aplikacja przeniesie Cię tam, gdzie skończyłeś/aś.</p>` +
             `<p>Będziesz potrzebować: dokumentu tożsamości, adresu i numeru konta bankowego.</p>` +
             `<p style="color:#888;font-size:13px">Jeśli to nie Ty zakładałeś/aś konto albo nie chcesz kontynuować — po prostu zignoruj tę wiadomość.</p>` +
